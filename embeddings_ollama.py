@@ -7,6 +7,7 @@ Fallback: sentence-transformers all-MiniLM-L6-v2 (only if Ollama unavailable
 
 Env:
   OLLAMA_URL              default http://localhost:11434
+  OLLAMA_API_KEY          optional Bearer token (Ollama Cloud / authenticated hosts)
   HOLAKAI_EMBED_MODEL     default nomic-embed-text
   HOLAKAI_EMBED_FALLBACK  ollama | minilm | none  (default: none — fail clearly)
 """
@@ -23,6 +24,7 @@ from typing import List, Optional, Sequence
 logger = logging.getLogger("holokai.embeddings")
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
 EMBED_MODEL = os.getenv("HOLAKAI_EMBED_MODEL", "nomic-embed-text")
 FALLBACK_MODE = os.getenv("HOLAKAI_EMBED_FALLBACK", "none").lower()
 # Keep probe short so core/startup never blocks when Ollama is offline
@@ -91,10 +93,13 @@ class Embedder:
             raise EmbeddingError("Cannot embed empty text")
 
         payload = json.dumps({"model": self.model, "prompt": prompt}).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if OLLAMA_API_KEY:
+            headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
         req = urllib.request.Request(
             f"{self.ollama_url}/api/embeddings",
             data=payload,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         try:

@@ -1,10 +1,24 @@
 /**
- * Local Ollama embeddings — sovereign, no cloud API required.
- * Model: nomic-embed-text (768-d)
+ * Ollama embeddings (local or cloud).
+ * Model default: nomic-embed-text (768-d)
+ *
+ * Env:
+ *   OLLAMA_URL / NEXT_PUBLIC_OLLAMA_URL  default http://localhost:11434
+ *   OLLAMA_API_KEY                       optional Bearer token (Ollama Cloud)
+ *   HOLAKAI_EMBED_MODEL                  default nomic-embed-text
  */
 
 const OLLAMA_URL = process.env.OLLAMA_URL || process.env.NEXT_PUBLIC_OLLAMA_URL || 'http://localhost:11434'
 const EMBED_MODEL = process.env.HOLAKAI_EMBED_MODEL || 'nomic-embed-text'
+const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY || ''
+
+function ollamaHeaders(extra = {}) {
+  const headers = { 'Content-Type': 'application/json', ...extra }
+  if (OLLAMA_API_KEY) {
+    headers.Authorization = `Bearer ${OLLAMA_API_KEY}`
+  }
+  return headers
+}
 
 /**
  * @param {string} text
@@ -22,7 +36,7 @@ export async function embedText(text) {
   try {
     res = await fetch(`${OLLAMA_URL}/api/embeddings`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: ollamaHeaders(),
       body: JSON.stringify({ model: EMBED_MODEL, prompt }),
       signal: controller.signal,
     })

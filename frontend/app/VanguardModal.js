@@ -191,9 +191,14 @@ export function VanguardModal({
     stayOnVoiceRef.current = fromVoice || activeTab === 'voice'
     if (!stayOnVoiceRef.current) setActiveTab('chat')
 
-    const userMsg = { role: 'user', content: text }
+    const imageB64 = imagePreview ? imagePreview.replace(/^data:image\/\w+;base64,/, '') : undefined
+    const userMsg = { role: 'user', content: text, images: imageB64 ? [imageB64] : undefined }
     setMessages((prev) => [...prev, userMsg])
     setInput('')
+    if (imagePreview) {
+      setImagePreview(null)
+      setImageNote('')
+    }
 
     try {
       let coreResult = null
@@ -392,11 +397,14 @@ export function VanguardModal({
       setImageNote('Please choose an image file.')
       return
     }
-    const url = URL.createObjectURL(file)
-    setImagePreview(url)
-    setImageNote(
-      `Loaded “${file.name}”. Vision analysis (LLaVA / multimodal) and generation hooks are ready for wiring — describe what you want in Chat, or attach context next.`
-    )
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setImagePreview(e.target.result)
+      setImageNote(
+        'Loaded "' + file.name + '" (' + (file.size / 1024).toFixed(1) + ' KB). Ask about it in Chat — the vision model will analyze it.'
+      )
+    }
+    reader.readAsDataURL(file)
   }
 
   const handleImageAction = () => {

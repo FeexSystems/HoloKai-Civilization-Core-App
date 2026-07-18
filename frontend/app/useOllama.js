@@ -3,24 +3,21 @@
 import { useState, useCallback, useRef } from 'react'
 
 const OLLAMA_URL = process.env.NEXT_PUBLIC_OLLAMA_URL || 'http://localhost:11434'
-// Prefer a small local default; override with NEXT_PUBLIC_OLLAMA_MODEL
-const DEFAULT_MODEL = process.env.NEXT_PUBLIC_OLLAMA_MODEL || 'llama3.2'
+const DEFAULT_MODEL = process.env.NEXT_PUBLIC_OLLAMA_MODEL || 'gemma4'
 const PREFERRED_MODELS = [
   DEFAULT_MODEL,
+  'gemma4:2b',
   'llama3.2',
   'llama3.1',
-  'llama3',
+  'qwen3:4b',
   'qwen2.5',
-  'qwen2',
   'mistral',
   'phi3',
   'gemma2',
-  'gemma',
 ]
 
 function pickModel(availableNames, preferred) {
   if (!availableNames?.length) return preferred
-  // Exact or tag-prefix match for preferred
   const exact = availableNames.find(
     (n) => n === preferred || n.startsWith(`${preferred.split(':')[0]}:`) || n === preferred.split(':')[0]
   )
@@ -31,7 +28,6 @@ function pickModel(availableNames, preferred) {
     )
     if (hit) return hit
   }
-  // Last resort: first non-embed model
   const chat = availableNames.find((n) => !/embed|nomic/i.test(n))
   return chat || availableNames[0] || preferred
 }
@@ -39,7 +35,7 @@ function pickModel(availableNames, preferred) {
 export function useOllama({ model = DEFAULT_MODEL } = {}) {
   const [isLoading, setIsLoading] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
-  const [available, setAvailable] = useState(null) // null unknown | true | false
+  const [available, setAvailable] = useState(null)
   const [resolvedModel, setResolvedModel] = useState(model)
   const abortRef = useRef(null)
   const modelRef = useRef(model)
@@ -69,22 +65,17 @@ export function useOllama({ model = DEFAULT_MODEL } = {}) {
     }
   }, [])
 
-  const generate = useCallback(async (messages, stream = true) => {
+  const generate = useCallback(async (messages, stream = true, opts = {}) => {
     setIsLoading(true)
     setStreamingContent('')
 
-    // Resolve a real installed model before generating
     try {
       const health = await checkHealth()
       if (!health.ok) {
-        throw new Error(
-          `Ollama unreachable at ${OLLAMA_URL}. Start Ollama or rely on Civilization Core summary.`
-        )
+        throw new Error(`Ollama unreachable at ${OLLAMA_URL}. Start Ollama or rely on Civilization Core summary.`)
       }
       if (!health.hasModel) {
-        throw new Error(
-          `No chat model found in Ollama. Pull one: ollama pull ${DEFAULT_MODEL}`
-        )
+        throw new Error(`No chat model found in Ollama. Pull one: ollama pull ${DEFAULT_MODEL}`)
       }
     } catch (err) {
       setIsLoading(false)
@@ -93,41 +84,35 @@ export function useOllama({ model = DEFAULT_MODEL } = {}) {
     }
 
     const activeModel = modelRef.current
-
-    const systemMsg = messages.find((m) => m.role === 'system')
-    const chatMessages = messages.filter((m) => m.role !== 'system')
-    const prompt =
-      chatMessages
-        .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-        .join('\n') +
-      '\n' +
-      (chatMessages[chatMessages.length - 1]?.role === 'user' ? 'Assistant:' : '')
-
-    const fullPrompt = systemMsg
-      ? `[System Instructions]\n${systemMsg.content}\n\n[Conversation]\n${prompt}`
-      : prompt
-
     const controller = new AbortController()
     abortRef.current = controller
 
+    const body = {
+      model: activeModel,
+      messages,
+      stream,
+      options: {
+        temperature: opts.temperature ?? 0.7,
+        top_p: opts.topP ?? 0.9,
+      },
+    }
+    if (opts.format) body.format = opts.format
+    if (opts.think) body.think = opts.think
+    if (opts.tools) body.tools = opts.tools
+
     try {
-      const res = await fetch(`${OLLAMA_URL}/api/generate`, {
+      const res = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: activeModel,
-          prompt: fullPrompt,
-          stream,
-          options: { temperature: 0.7, top_p: 0.9 },
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       })
 
       if (!res.ok) {
-        const body = await res.text().catch(() => '')
+        const errBody = await res.text().catch(() => '')
         setAvailable(false)
         throw new Error(
-          `Ollama error ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}. Is model "${activeModel}" pulled?`
+          `Ollama error ${res.status}${errBody ? `: ${errBody.slice(0, 200)}` : ''}. Is model "${activeModel}" pulled?`
         )
       }
 
@@ -136,7 +121,7 @@ export function useOllama({ model = DEFAULT_MODEL } = {}) {
       if (!stream) {
         const data = await res.json()
         setIsLoading(false)
-        return data.response
+        return data.message?.content || ''
       }
 
       const reader = res.body.getReader()
@@ -153,8 +138,8 @@ export function useOllama({ model = DEFAULT_MODEL } = {}) {
         for (const line of lines) {
           try {
             const parsed = JSON.parse(line)
-            if (parsed.response) {
-              fullText += parsed.response
+            if (parsed.message?.content) {
+              fullText += parsed.message.content
               setStreamingContent(fullText)
             }
             if (parsed.done) break
