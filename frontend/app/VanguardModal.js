@@ -128,13 +128,32 @@ export function VanguardModal({
   const recognitionRef = useRef(null)
   const fileInputRef = useRef(null)
 
-  const { generate, isLoading: ollamaLoading, streamingContent, stop } = useOllama()
+  const [showModelPicker, setShowModelPicker] = useState(false)
+  const [model, setModelState] = useState('gemma4')
+  const [healthModels, setHealthModels] = useState([])
+
+  const {
+    generate,
+    isLoading: ollamaLoading,
+    streamingContent,
+    stop,
+    useCloud,
+    setCloudMode,
+    setModel,
+    model: resolvedModel,
+    CLOUD_MODELS,
+  } = useOllama()
   const { retrieve, buildContextPrompt, contexts, mode: ragMode } = useRAG()
   const tts = useTTS()
   const whisper = useWhisper()
   const isLoading = busy || ollamaLoading
 
   const archetypeData = getArchetypeById(activeId)
+
+  // Sync resolved model
+  useEffect(() => {
+    if (resolvedModel) setModelState(resolvedModel)
+  }, [resolvedModel])
 
   // Sync when parent changes archetype
   useEffect(() => {
@@ -722,6 +741,66 @@ export function VanguardModal({
                           : ''}
                       </span>
                     ))}
+                  </div>
+                )}
+                {/* Model / Cloud bar */}
+                <div className="px-6 py-2 bg-white/[0.02] border-t border-white/5 flex items-center gap-3 overflow-x-auto justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowModelPicker(!showModelPicker)}
+                      className="text-[10px] text-zinc-500 hover:text-amber-300 flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white/5"
+                    >
+                      <Zap className="w-2.5 h-2.5" />
+                      {useCloud ? 'Cloud' : 'Local'} · {model}
+                    </button>
+                  </div>
+                </div>
+                {showModelPicker && (
+                  <div className="px-6 py-3 bg-black/40 border-t border-white/5 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Engine</span>
+                      <button
+                        type="button"
+                        onClick={() => { setCloudMode(!useCloud); setShowModelPicker(false) }}
+                        className={`text-[11px] px-3 py-1.5 rounded-full border transition ${
+                          useCloud
+                            ? 'bg-purple-500/20 border-purple-400/40 text-purple-200'
+                            : 'bg-amber-500/10 border-amber-400/30 text-amber-200'
+                        }`}
+                      >
+                        {useCloud ? '☁️ Ollama Cloud' : '💻 Local Ollama'}
+                      </button>
+                    </div>
+                    <label className="block text-[10px] text-zinc-500">
+                      Model
+                      <select
+                        value={model}
+                        onChange={(e) => { setModel(e.target.value); setShowModelPicker(false) }}
+                        className="mt-1 w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-sm text-white"
+                      >
+                        {useCloud
+                          ? CLOUD_MODELS.map((m) => (
+                              <option key={m.id} value={m.id}>{m.label} — {m.desc}</option>
+                            ))
+                          : healthModels.length > 0
+                            ? healthModels.map((m) => (
+                                <option key={m} value={m}>{m}</option>
+                              ))
+                            : <option value={model}>{model}</option>
+                        }
+                      </select>
+                    </label>
+                    {!useCloud && (
+                      <p className="text-[9px] text-zinc-600">
+                        Local models from Ollama. Pull more: <span className="font-mono">ollama pull &lt;model&gt;</span>
+                      </p>
+                    )}
+                    {useCloud && (
+                      <p className="text-[9px] text-zinc-600">
+                        Cloud models run on Ollama's servers. No download needed.
+                      </p>
+                    )}
                   </div>
                 )}
               </>

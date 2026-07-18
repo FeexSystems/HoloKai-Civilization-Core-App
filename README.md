@@ -65,8 +65,16 @@ npm run dev
 ```
 
 **Environment variables:**
-- `XAI_API_KEY` – (optional) enables LLM Supervisor with Grok/xAI
-- `NEXT_PUBLIC_API_URL=http://localhost:8000` – frontend API target
+- `OLLAMA_API_KEY` – Ollama Cloud chat (supervisor + persona proxy); create at https://ollama.com/settings/keys
+- `OLLAMA_URL` – embed/local host (default `http://localhost:11434`)
+- `HOLAKAI_CHAT_BACKEND` – `auto` (local → cloud), `local`, or `cloud`
+- `HOLAKAI_CHAT_MODEL` – chat model (default `gemma4`)
+- `HOLAKAI_SUPERVISOR_PROVIDER` – `auto` | `ollama` | `xai`
+- `XAI_API_KEY` – (optional) xAI Grok supervisor fallback
+- `NEXT_PUBLIC_API_URL` / `/backend` – frontend → FastAPI
+- `NEXT_PUBLIC_OLLAMA_PROXY=1` – persona chat via `/backend/api/ollama` (keeps API key server-side)
+
+Chat/embeddings use the official [ollama-python](https://github.com/ollama/ollama-python) client (`ollama_client.py`).
 
 ## Vector RAG (Vanguard ancestral memory)
 

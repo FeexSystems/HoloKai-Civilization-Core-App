@@ -5,6 +5,10 @@ pydantic>=2.0
 python-dotenv>=1.0.0
 openai>=1.0.0
 
+# Official Ollama Python client (local host or https://ollama.com cloud)
+# https://github.com/ollama/ollama-python
+ollama>=0.6.0
+
 # Vector RAG (aligned with frontend Ollama nomic-embed-text)
 # chromadb is OPTIONAL — without it, KnowledgeBase uses pure-Python JSON cosine store.
 # On Windows, chromadb often needs MSVC Build Tools (chroma-hnswlib). Prefer Docker Chroma

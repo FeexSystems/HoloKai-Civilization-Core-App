@@ -11,7 +11,7 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from holokai_backend import CivilizationCore
@@ -83,6 +83,20 @@ class RagRetrieveRequest(BaseModel):
     source: str | None = None
 
 
+class RagAskRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    k: int = Field(5, ge=1, le=20)
+    min_score: float = Field(0.22, ge=0.0, le=1.0)
+    domain: str | None = None
+    model: str | None = Field(
+        None, description="Chat model for synthesis (default HOLAKAI_CHAT_MODEL / gemma4)"
+    )
+    synthesize: bool = Field(True, description="If false, return contexts only")
+    seed_if_empty: bool = Field(
+        True, description="Auto-seed knowledge base when empty (Full RAG)"
+    )
+
+
 class QueryResponse(BaseModel):
     title: str
     query: str
@@ -98,6 +112,19 @@ class QueryResponse(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=3000)
+
+
+class OllamaChatRequest(BaseModel):
+    messages: List[Dict[str, Any]] = Field(..., min_length=1)
+    model: str | None = Field(
+        None, description="Chat model (default HOLAKAI_CHAT_MODEL / gemma4)"
+    )
+    stream: bool = Field(True)
+    temperature: float = Field(0.7, ge=0.0, le=2.0)
+    top_p: float = Field(0.9, ge=0.0, le=1.0)
+    format: str | None = Field(None, description="e.g. json")
+    think: bool | None = None
+    tools: list | None = None
     voice: str = "en-US-GuyNeural"
     rate: float = 1.0
     pitch: float = 1.0
@@ -162,10 +189,20 @@ async def health():
     elif not rag.get("ready") and rag.get("enabled"):
         hint = "POST /api/rag/seed or: python seed_knowledge.py"
 
+    ollama_status = {}
+    try:
+        from ollama_client import status as ollama_status_fn
+
+        ollama_status = ollama_status_fn()
+    except Exception as exc:
+        ollama_status = {"ok": False, "error": str(exc)}
+
     return {
         "status": "ok",
         "service": "HoloKai Civilization Core",
-        "version": "2.1.0",
+        "version": "2.2.0",
+        "ollama": ollama_status,
+        "supervisor": getattr(getattr(core, "supervisor", None), "active_backend", None),
         "vector_rag": {
             "ready": bool(rag.get("ready")),
             "enabled": bool(rag.get("enabled")),
@@ -239,6 +276,56 @@ async def rag_seed(force: bool = False):
         ) from exc
 
 
+@app.post("/api/rag/ask")
+async def rag_ask(payload: RagAskRequest):
+    """
+    Full RAG: retrieve + grounded answer via ollama.Client (local → cloud fallback).
+
+    Embeddings: Ollama host chain, then minilm/hashing when HOLAKAI_FULL_RAG=1.
+    Chat synthesis: local Ollama → https://ollama.com when OLLAMA_API_KEY is set.
+    """
+    try:
+        from rag_full import ensure_full_rag_ready, full_rag_ask
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    kb = core.kb
+    if payload.seed_if_empty and (kb is None or kb.count() == 0):
+        try:
+            ready = ensure_full_rag_ready(force_seed=False)
+            if ready.get("ok"):
+                from knowledge_base import KnowledgeBase
+
+                kb = KnowledgeBase()
+                core.kb = kb
+                for agent in core.agents.values():
+                    if hasattr(agent, "kb"):
+                        agent.kb = kb
+                core.rag_status = {
+                    "enabled": True,
+                    "ready": kb.count() > 0,
+                    "store": kb.status(),
+                    "seed": ready.get("seed"),
+                }
+        except Exception as exc:
+            logger.warning("Full RAG auto-seed skipped: %s", exc)
+
+    try:
+        result = full_rag_ask(
+            payload.query,
+            k=payload.k,
+            min_score=payload.min_score,
+            domain=payload.domain,
+            model=payload.model,
+            synthesize=payload.synthesize,
+            kb=kb,
+        )
+        return result
+    except Exception as exc:
+        logger.exception("Full RAG ask failed")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @app.post("/api/rag/retrieve")
 async def rag_retrieve(payload: RagRetrieveRequest):
     """
@@ -246,10 +333,16 @@ async def rag_retrieve(payload: RagRetrieveRequest):
     Does not run the full multi-agent supervisor (use POST /api/query for that).
     """
     if core.kb is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector knowledge base not loaded. POST /api/rag/seed first.",
-        )
+        # Full RAG: try lazy init with hashing/minilm if Ollama embeds down
+        try:
+            from knowledge_base import KnowledgeBase
+
+            core.kb = KnowledgeBase()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Vector knowledge base not loaded ({exc}). POST /api/rag/seed or /api/rag/ask.",
+            ) from exc
     try:
         chunks = core.kb.retrieve(
             payload.query,
@@ -376,6 +469,107 @@ async def text_to_speech(payload: TTSRequest):
         raise HTTPException(status_code=503, detail="edge-tts not installed on server")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/ollama/status")
+async def ollama_status():
+    """Ollama client status (local + cloud, via ollama-python)."""
+    try:
+        from ollama_client import status as ollama_status_fn
+
+        return ollama_status_fn()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/ollama/tags")
+async def ollama_tags():
+    """List models — same shape as Ollama /api/tags for the frontend proxy."""
+    try:
+        from ollama_client import list_models, resolve_chat_host
+
+        host = resolve_chat_host()
+        names = list_models(host, purpose="chat")
+        return {
+            "models": [{"name": n, "model": n} for n in names],
+            "host": host,
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Ollama unreachable: {exc}",
+        ) from exc
+
+
+@app.post("/api/ollama/chat")
+async def ollama_chat(payload: OllamaChatRequest):
+    """
+    Chat via official ollama-python client (local or cloud).
+    Keeps OLLAMA_API_KEY server-side — browser should call this, not ollama.com directly.
+    """
+    import json as _json
+
+    model = payload.model or os.getenv("HOLAKAI_CHAT_MODEL") or os.getenv(
+        "NEXT_PUBLIC_OLLAMA_MODEL", "gemma4"
+    )
+    options = {"temperature": payload.temperature, "top_p": payload.top_p}
+
+    try:
+        from ollama_client import OllamaClientError, chat, stream_chat_ndjson
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="ollama package missing — pip install ollama",
+        ) from exc
+
+    if not payload.stream:
+        try:
+            resp = chat(
+                payload.messages,
+                model=model,
+                stream=False,
+                options=options,
+                format=payload.format,
+                tools=payload.tools,
+                think=payload.think,
+            )
+        except OllamaClientError as exc:
+            raise HTTPException(status_code=exc.status_code or 502, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        # Normalize to Ollama native response shape
+        message = getattr(resp, "message", None)
+        if message is not None:
+            content = getattr(message, "content", "") or ""
+            tool_calls = getattr(message, "tool_calls", None)
+            body: Dict[str, Any] = {
+                "model": model,
+                "message": {"role": "assistant", "content": content},
+                "done": True,
+            }
+            if tool_calls:
+                body["message"]["tool_calls"] = tool_calls
+            return body
+        if isinstance(resp, dict):
+            return resp
+        return {"model": model, "message": {"role": "assistant", "content": str(resp)}, "done": True}
+
+    def generate():
+        try:
+            for chunk in stream_chat_ndjson(
+                payload.messages,
+                model=model,
+                options=options,
+                format=payload.format,
+                tools=payload.tools,
+                think=payload.think,
+            ):
+                yield _json.dumps(chunk) + "\n"
+        except Exception as exc:
+            yield _json.dumps({"error": str(exc), "done": True}) + "\n"
+
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
 
 
 @app.post("/api/web_search")

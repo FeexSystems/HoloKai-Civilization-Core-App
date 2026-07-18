@@ -692,7 +692,7 @@ class RuleBasedSupervisor:
 
 
 # ----------------------------------------------------------------------
-# LLM-Powered Supervisor (Grok / xAI)
+# LLM-Powered Supervisor (Ollama → xAI / Grok → rules)
 # ----------------------------------------------------------------------
 SUPERVISOR_SYSTEM_PROMPT = """
 You are the Supervisor of HoloKai, a multi-agent system specializing in African civilizations, history, archaeology, linguistics, and cultural protocols.
@@ -720,65 +720,151 @@ Rules:
 }
 """
 
+VALID_SUPERVISOR_AGENTS = {
+    "Historian AI",
+    "Archaeologist AI",
+    "Anthropologist AI",
+    "Linguist AI",
+    "Ethicist AI",
+}
+
 
 class LLMSupervisor:
+    """
+    Planning supervisor.
+
+    Provider order (HOLAKAI_SUPERVISOR_PROVIDER=auto default):
+      1. Ollama (local or cloud via ollama-python) when reachable / key present
+      2. xAI Grok when XAI_API_KEY / OPENAI_API_KEY set
+      3. Rule-based fallback
+    """
+
     def __init__(self):
         self.fallback = RuleBasedSupervisor()
-        self.api_key = os.getenv("XAI_API_KEY") or os.getenv("OPENAI_API_KEY")
-        self.enabled = bool(self.api_key)
+        self.provider = (os.getenv("HOLAKAI_SUPERVISOR_PROVIDER") or "auto").lower()
+        self.ollama_model = (
+            os.getenv("HOLAKAI_SUPERVISOR_MODEL")
+            or os.getenv("HOLAKAI_CHAT_MODEL")
+            or os.getenv("NEXT_PUBLIC_OLLAMA_MODEL")
+            or "gemma4"
+        )
+        self.xai_key = os.getenv("XAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+        self.xai_client = None
+        self.ollama_ready = False
+        self.active_backend: str = "rules"
 
-        if self.enabled:
+        # Probe Ollama (fast; auto falls through on failure)
+        if self.provider in ("auto", "ollama"):
+            try:
+                from ollama_client import list_models, resolve_chat_host
+
+                host = resolve_chat_host()
+                list_models(host, purpose="chat")
+                self.ollama_ready = True
+                self.active_backend = "ollama"
+                logger.info(
+                    "LLM Supervisor: Ollama ready · host=%s · model=%s",
+                    host,
+                    self.ollama_model,
+                )
+            except Exception as exc:
+                self.ollama_ready = False
+                if self.provider == "ollama":
+                    logger.warning("Ollama supervisor requested but unavailable: %s", exc)
+                else:
+                    logger.info("Ollama supervisor probe failed (%s); trying xAI / rules", exc)
+
+        if (
+            not self.ollama_ready
+            and self.provider in ("auto", "xai", "grok")
+            and self.xai_key
+        ):
             try:
                 from openai import OpenAI
-                self.client = OpenAI(
-                    api_key=self.api_key,
-                    base_url="https://api.x.ai/v1",  # xAI endpoint
+
+                self.xai_client = OpenAI(
+                    api_key=self.xai_key,
+                    base_url="https://api.x.ai/v1",
                 )
+                self.active_backend = "xai"
                 logger.info("LLM Supervisor initialized with xAI / Grok")
             except Exception as e:
-                logger.warning(f"Failed to initialize LLM client: {e}")
-                self.enabled = False
-        else:
-            logger.info("No XAI_API_KEY found – using rule-based Supervisor only")
+                logger.warning("Failed to initialize xAI client: %s", e)
+                self.xai_client = None
+
+        if not self.ollama_ready and self.xai_client is None:
+            self.active_backend = "rules"
+            logger.info("No LLM supervisor available – using rule-based Supervisor only")
+
+    @property
+    def enabled(self) -> bool:
+        return self.active_backend in ("ollama", "xai")
+
+    def _parse_plan(self, raw: str) -> ExecutionPlan:
+        data = json.loads(raw)
+        agents = data.get("agents_to_call", ["Historian AI", "Ethicist AI"])
+        agents = [a for a in agents if a in VALID_SUPERVISOR_AGENTS]
+        if not agents:
+            agents = ["Historian AI", "Ethicist AI"]
+        return ExecutionPlan(
+            agents_to_call=agents,
+            require_ethicist=data.get("require_ethicist", True),
+            notes=data.get("reasoning", "LLM-generated plan"),
+        )
+
+    def _plan_ollama(self, query: str) -> ExecutionPlan:
+        from ollama_client import chat_text
+
+        raw = chat_text(
+            [
+                {"role": "system", "content": SUPERVISOR_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Query: {query}"},
+            ],
+            model=self.ollama_model,
+            options={"temperature": 0.2},
+            format="json",
+        )
+        # Some models wrap JSON in fences
+        text = (raw or "").strip()
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.lower().startswith("json"):
+                text = text[4:].strip()
+        return self._parse_plan(text)
+
+    def _plan_xai(self, query: str) -> ExecutionPlan:
+        response = self.xai_client.chat.completions.create(
+            model="grok-3-latest",
+            messages=[
+                {"role": "system", "content": SUPERVISOR_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Query: {query}"},
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"},
+        )
+        return self._parse_plan(response.choices[0].message.content)
 
     def plan(self, query: str) -> ExecutionPlan:
-        if not self.enabled:
-            return self.fallback.plan(query)
+        if self.active_backend == "ollama" and self.ollama_ready:
+            try:
+                return self._plan_ollama(query)
+            except Exception as e:
+                logger.warning("Ollama supervisor failed, falling back: %s", e)
+                if self.xai_client is not None:
+                    try:
+                        return self._plan_xai(query)
+                    except Exception as e2:
+                        logger.warning("xAI supervisor also failed: %s", e2)
+                return self.fallback.plan(query)
 
-        try:
-            response = self.client.chat.completions.create(
-                model="grok-3-latest",
-                messages=[
-                    {"role": "system", "content": SUPERVISOR_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"Query: {query}"},
-                ],
-                temperature=0.2,
-                response_format={"type": "json_object"},
-            )
-            data = json.loads(response.choices[0].message.content)
+        if self.active_backend == "xai" and self.xai_client is not None:
+            try:
+                return self._plan_xai(query)
+            except Exception as e:
+                logger.warning("LLM Supervisor failed, falling back to rules: %s", e)
+                return self.fallback.plan(query)
 
-            agents = data.get("agents_to_call", ["Historian AI", "Ethicist AI"])
-            # Safety filter – only allow known agents
-            valid_agents = {
-                "Historian AI",
-                "Archaeologist AI",
-                "Anthropologist AI",
-                "Linguist AI",
-                "Ethicist AI",
-            }
-            agents = [a for a in agents if a in valid_agents]
-
-            if not agents:
-                agents = ["Historian AI", "Ethicist AI"]
-
-            return ExecutionPlan(
-                agents_to_call=agents,
-                require_ethicist=data.get("require_ethicist", True),
-                notes=data.get("reasoning", "LLM-generated plan"),
-            )
-        except Exception as e:
-            logger.warning(f"LLM Supervisor failed, falling back to rules: {e}")
-            return self.fallback.plan(query)
+        return self.fallback.plan(query)
 
 
 # ----------------------------------------------------------------------

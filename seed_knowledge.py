@@ -2,9 +2,14 @@
 """
 Seed HoloKai Python vector knowledge base (Ollama nomic-embed-text + Chroma).
 
+Embeddings go through ollama-python (`ollama_client` / `embeddings_ollama`).
+Cloud chat works without local Ollama, but **embeddings need local** nomic-embed-text
+(Ollama Cloud does not serve embed models for RAG).
+
 Prerequisites:
-  ollama pull nomic-embed-text
-  pip install -r requirements.txt
+  pip install -r requirements.txt   # includes ollama
+  ollama pull nomic-embed-text      # local Ollama app required for embeds
+  # optional chat/cloud: OLLAMA_API_KEY + HOLAKAI_CHAT_BACKEND=auto
 
 Usage:
   python seed_knowledge.py
