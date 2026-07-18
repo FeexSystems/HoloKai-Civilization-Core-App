@@ -1,0 +1,258 @@
+HoloKai – Civilization Core
+README & Implementation Plan
+
+HoloKai
+Where Civilization Remembers.
+HoloKai is a multi-agent AI system dedicated to preserving and explaining the civilizations, cultures, sciences, philosophies, and innovations of Africa and humanity. It combines a sophisticated Python backend with a futuristic React/Next.js frontend featuring a real-time 3D humanoid interface.
+
+Table of Contents
+	1	Project Overview
+	2	Architecture
+	3	Features
+	4	Tech Stack
+	5	Prerequisites
+	6	Project Structure
+	7	Installation & Setup
+	8	Environment Variables
+	9	Running the Project
+	10	API Reference
+	11	Multi-Agent System
+	12	3D Robot (Spline) Integration
+	13	Implementation Plan
+	14	Roadmap
+
+1. Project Overview
+HoloKai consists of two main parts:
+Layer
+Description
+Backend
+Python FastAPI server + multi-agent orchestration engine
+Frontend
+Next.js application with real-time 3D robot interface
+The backend uses a Supervisor + Parallel hybrid pattern to coordinate specialist agents (Historian, Archaeologist, Anthropologist, Linguist, Ethicist). The frontend presents the results through a cinematic UI and an interactive 3D humanoid.
+
+2. Architecture
+User Query
+    │
+    ▼
+┌────────────────────────────┐
+│     Next.js Frontend       │
+│  (Emotion Engine, Agents,  │
+│   3D Robot, Synthesis)     │
+└────────────┬───────────────┘
+             │  POST /api/query
+             ▼
+┌────────────────────────────┐
+│     FastAPI (main.py)      │
+└────────────┬───────────────┘
+             │
+             ▼
+┌────────────────────────────┐
+│   CivilizationCore         │
+│  ┌──────────────────────┐  │
+│  │  LLM / Rule Supervisor│  │
+│  └──────────┬───────────┘  │
+│             │              │
+│  ┌──────────▼───────────┐  │
+│  │  Parallel Agents     │  │
+│  │  • Historian         │  │
+│  │  • Archaeologist     │  │
+│  │  • Anthropologist    │  │
+│  │  • Linguist          │  │
+│  │  • Ethicist          │  │
+│  └──────────┬───────────┘  │
+│             │              │
+│  ┌──────────▼───────────┐  │
+│  │ Contradiction Detect │  │
+│  │ + Ethic Engine       │  │
+│  └──────────────────────┘  │
+└────────────────────────────┘
+
+3. Features
+	•	Multi-agent historical synthesis focused on African civilizations
+	•	Supervisor + Parallel orchestration pattern
+	•	Optional LLM-powered Supervisor (Grok / xAI)
+	•	Contradiction detection layer
+	•	Real-time Emotion Engine visualization
+	•	Interactive 3D humanoid (Spline)
+	•	Agent-specific color palette on the robot core
+	•	Clean, cinematic dark UI with amber/gold accents
+	•	Fully typed Python backend + modern React frontend
+
+4. Tech Stack
+Backend
+	•	Python 3.10+
+	•	FastAPI
+	•	Uvicorn
+	•	Pydantic
+	•	Concurrent futures (parallel agents)
+	•	Optional: OpenAI-compatible client for xAI/Grok
+Frontend
+	•	Next.js 14+ (App Router)
+	•	React 18
+	•	TypeScript
+	•	Tailwind CSS
+	•	Lucide React
+	•	@splinetool/react-spline
+
+5. Prerequisites
+	•	Node.js 18+
+	•	Python 3.10+
+	•	npm or pnpm
+	•	Git
+	•	(Optional) xAI API key for LLM Supervisor
+
+6. Project Structure
+holokai/
+├── backend/
+│   ├── holokai_backend.py      # Multi-agent core
+│   ├── main.py                 # FastAPI entry point
+│   ├── requirements.txt
+│   └── .env.example
+│
+├── frontend/                   # Next.js app
+│   ├── app/
+│   │   └── page.tsx            # Main HoloKai interface
+│   ├── package.json
+│   └── .env.local.example
+│
+└── README.md
+
+7. Installation & Setup
+Backend
+cd backend
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+requirements.txt
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0
+openai>=1.0.0
+python-dotenv>=1.0.0
+Frontend
+cd frontend
+
+npm install
+# or
+pnpm install
+
+8. Environment Variables
+Backend (`.env`)
+XAI_API_KEY=your_xai_key_here          # Optional – enables LLM Supervisor
+PORT=8000
+Frontend (`.env.local`)
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+9. Running the Project
+Open two terminals.
+Terminal 1 – Backend
+cd backend
+source venv/bin/activate
+python main.py
+Backend will start at: http://localhost:8000
+Terminal 2 – Frontend
+cd frontend
+npm run dev
+Frontend will start at: http://localhost:3000
+
+10. API Reference
+`GET /health`
+Health check endpoint.
+Response
+{
+  "status": "ok",
+  "service": "HoloKai Civilization Core",
+  "version": "1.1.0"
+}
+`POST /api/query`
+Request
+{
+  "query": "Tell me about Sungbo's Eredo"
+}
+Response
+{
+  "title": "Sungbo’s Eredo Synthesis",
+  "query": "Tell me about Sungbo's Eredo",
+  "fragments": [...],
+  "summary": "...",
+  "confidence": 0.915,
+  "trace_id": "uuid",
+  "active_agents": ["Historian AI", "Archaeologist AI", ...],
+  "safety_notes": [],
+  "emotions": {
+    "empathy": 0.82,
+    "curiosity": 0.93,
+    "analytical": 0.91,
+    "culturalResonance": 0.96
+  }
+}
+
+11. Multi-Agent System
+Agent
+Responsibility
+Historian AI
+Political history, kingdoms, timelines
+Archaeologist AI
+Material evidence, sites, dating
+Anthropologist AI
+Oral traditions, cultural protocols
+Linguist AI
+Language, terminology, reconstruction
+Ethicist AI
+Cultural sensitivity & safety framing
+Orchestration Flow
+	1	Supervisor creates an ExecutionPlan
+	2	Selected agents run in parallel
+	3	Contradiction detection runs
+	4	Ethicist performs final review
+	5	Structured response is returned
+
+12. 3D Robot (Spline) Integration
+The center stage uses a Spline scene.
+	•	Current demo scene: glossy black robot
+	•	Later: replace with custom HoloKai humanoid (gold accents + Adinkra details)
+To use your own scene:
+const SPLINE_SCENE = "https://prod.spline.design/YOUR_SCENE_ID/scene.splinecode"
+The robot core color reacts to active agents (Historian = deep gold, Archaeologist = bronze, etc.).
+
+13. Implementation Plan
+Phase 1 – Foundation (Current)
+	•	Multi-agent backend with Supervisor + Parallel pattern
+	•	FastAPI wrapper
+	•	Full Next.js UI with all panels
+	•	Spline 3D integration
+	•	Agent-specific color logic
+Phase 2 – Intelligence Upgrade
+	•	Connect real LLM Supervisor (Grok/xAI)
+	•	Improve agent knowledge with retrieval (RAG)
+	•	Add contradiction explanations in the UI
+	•	Streaming responses
+Phase 3 – 3D & Branding
+	•	Create custom HoloKai robot in Spline (gold + Adinkra)
+	•	Add animation states (Idle / Listening / Thinking / Speaking)
+	•	Integrate official HoloKai logo & icon system
+Phase 4 – Production
+	•	Dockerize backend + frontend
+	•	Add authentication (optional)
+	•	Deploy backend (Railway / Render / Fly.io)
+	•	Deploy frontend (Vercel)
+	•	Add monitoring & logging
+
+14. Roadmap
+Timeline
+Focus
+Short-term
+Custom Spline robot + better agent prompts
+Mid-term
+RAG knowledge base + streaming
+Long-term
+Multi-user sessions + civilization memory graph
+
+HoloKai
+Where Civilization Remembers.
+Built with scholarly rigor and African futurism.
