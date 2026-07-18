@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Spline from '@splinetool/react-spline'
+import { VanguardModal } from './VanguardModal'
+import { ARCHETYPES } from './archetypes'
 import {
   Mic, MicOff, Brain, ShieldCheck, Send,
   Cpu, HeartPulse, Radio, Database, Activity, Loader2,
   Sparkles, Zap, Globe, BookOpen, Compass,
   PanelLeftOpen, PanelRightOpen, PanelLeftClose, PanelRightClose,
-  Volume2, VolumeX, MessageSquare, ChevronDown, MousePointerClick
+  Volume2, VolumeX, MessageSquare, ChevronDown, MousePointerClick, Users
 } from 'lucide-react'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -367,6 +369,9 @@ export default function HoloKaiPage() {
   const [muted, setMuted] = useState(false)
   const [greetingAnimation, setGreetingAnimation] = useState(null)
   const [autoScroll, setAutoScroll] = useState(true)
+  const [vanguardOpen, setVanguardOpen] = useState(false)
+  const [vanguardArchetype, setVanguardArchetype] = useState('oluwa-core')
+  const [selectedArchetype, setSelectedArchetype] = useState(null)
   const chatEndRef = useRef(null)
   const chatContainerRef = useRef(null)
 
@@ -494,12 +499,77 @@ export default function HoloKaiPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {/* Vanguard Button */}
+          <div className="relative">
+            <button
+              onClick={() => { playBeep(); setVanguardOpen(p => !p); setVanguardArchetype(selectedArchetype || 'oluwa-core') }}
+              className={`glass-panel flex items-center gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 ${
+                selectedArchetype
+                  ? 'border-amber-500/40 text-amber-400 bg-amber-500/10 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
+                  : 'border-white/10 text-zinc-400 hover:text-amber-300 hover:border-amber-500/20'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-mono tracking-wider">
+                {selectedArchetype ? ARCHETYPES.find(a => a.id === selectedArchetype)?.name : 'VANGUARD'}
+              </span>
+            </button>
+          </div>
+
           <div className={`flex items-center gap-2 px-3 py-1.5 glass-panel rounded-full border ${CurrentState.bg}/20`}>
             <CurrentState.icon className={`w-3 h-3 ${CurrentState.color}`} />
             <span className={`text-[10px] font-mono tracking-wider ${CurrentState.color}`}>{CurrentState.label}</span>
           </div>
         </div>
       </header>
+
+      {/* Archetype Selector Panel */}
+      {vanguardOpen && !selectedArchetype && (
+        <div className="relative z-20 px-6 py-3 border-b border-white/5 bg-black/60 backdrop-blur-xl">
+          <div className="max-w-4xl mx-auto">
+            <p className="text-[10px] text-zinc-500 font-mono tracking-widest mb-3">SELECT A VANGUARD ARCHETYPE</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {ARCHETYPES.map((arch) => (
+                <button
+                  key={arch.id}
+                  onClick={() => { playBeep(880, 40); setSelectedArchetype(arch.id); setVanguardArchetype(arch.id); setVanguardOpen(false) }}
+                  className={`glass-panel rounded-2xl p-3 border text-left transition-all duration-200 hover:scale-[1.02] ${
+                    selectedArchetype === arch.id
+                      ? 'border-amber-500/40 bg-amber-500/10'
+                      : 'border-white/5 hover:border-white/20'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 mb-1">
+                    <span className="text-lg">{arch.emoji}</span>
+                    <span className={`text-xs font-semibold`} style={{ color: arch.color }}>{arch.name}</span>
+                  </div>
+                  <p className="text-[10px] text-zinc-500">{arch.title}</p>
+                  <p className="text-[9px] text-zinc-600 mt-1 leading-relaxed">{arch.description}</p>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setVanguardOpen(false)}
+              className="mt-3 text-[10px] text-zinc-500 hover:text-zinc-300 font-mono"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Vanguard Modal */}
+      {selectedArchetype && (
+        <VanguardModal
+          isOpen={vanguardOpen}
+          onClose={() => { setVanguardOpen(false); setSelectedArchetype(null) }}
+          archetype={vanguardArchetype}
+          onAnimationTrigger={(arch) => {
+            setGreetingAnimation('wave')
+            setTimeout(() => setGreetingAnimation(null), 2000)
+          }}
+        />
+      )}
 
       {/* Main Content — Robot-First Layout */}
       <div className="flex-1 flex overflow-hidden relative z-10">
