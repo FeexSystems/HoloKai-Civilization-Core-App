@@ -1,0 +1,106 @@
+# HoloKai — optional vector infrastructure (sovereign / local)
+#
+# Minimal local path needs NO Docker:
+#   ollama pull nomic-embed-text
+#   cd frontend && node scripts/seed-knowledge.mjs
+#   (uses pure JSON vector store in frontend/.data/)
+#
+# Profiles:
+#   chroma          — Chroma only (:8001)
+#   qdrant          — Qdrant only (:6333 / :6334)
+#   ollama          — Ollama in Docker (:11434)
+#   stack           — Chroma + Ollama
+#   qdrant-ollama   — Qdrant + Ollama (+ auto-pull nomic-embed-text)
+#
+# Examples:
+#   docker compose --profile qdrant-ollama up -d
+#   docker compose --profile chroma up -d
+#   docker compose --profile stack up -d
+
+services:
+  chroma:
+    image: chromadb/chroma:0.6.3
+    profiles: ['chroma', 'stack']
+    ports:
+      - '8001:8000'
+    volumes:
+      - holokai_chroma:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test: ['CMD-SHELL', 'bash -c "echo > /dev/tcp/127.0.0.1/8000" || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.2
+    profiles: ['qdrant', 'qdrant-ollama']
+    ports:
+      - '6333:6333'
+      - '6334:6334'
+    volumes:
+      - holokai_qdrant:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    healthcheck:
+      test: ['CMD-SHELL', 'bash -c "echo > /dev/tcp/127.0.0.1/6333" || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 10s
+    restart: unless-stopped
+
+  # Prefer native Ollama on Windows/macOS GPU hosts when possible.
+  # Docker Ollama is fine for CPU demos / Linux servers.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ['ollama', 'stack', 'qdrant-ollama']
+    ports:
+      - '11434:11434'
+    volumes:
+      - holokai_ollama:/root/.ollama
+    healthcheck:
+      test: ['CMD-SHELL', 'ollama list >/dev/null 2>&1 || exit 1']
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  # One-shot: pull embedding model used by HoloKai RAG
+  ollama-init:
+    image: ollama/ollama:latest
+    profiles: ['stack', 'qdrant-ollama']
+    depends_on:
+      ollama:
+        condition: service_started
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        echo "Waiting for Ollama..."
+        i=0
+        until ollama list >/dev/null 2>&1; do
+          i=$$((i+1))
+          if [ $$i -gt 60 ]; then
+            echo "Ollama did not become ready in time"
+            exit 1
+          fi
+          sleep 2
+        done
+        echo "Pulling nomic-embed-text (HoloKai default embeddings)..."
+        ollama pull nomic-embed-text
+        echo "Optional chat model (skip if bandwidth-limited)..."
+        ollama pull llama3.2 || true
+        echo "Ollama models ready."
+    restart: 'no'
+
+volumes:
+  holokai_chroma:
+  holokai_qdrant:
+  holokai_ollama:

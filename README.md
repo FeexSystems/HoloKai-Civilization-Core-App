@@ -69,6 +69,57 @@ npm run dev
 - `XAI_API_KEY` – (optional) enables LLM Supervisor with Grok/xAI
 - `NEXT_PUBLIC_API_URL=http://localhost:8000` – frontend API target
 
+## Vector RAG (Vanguard ancestral memory)
+
+Local embeddings + vector retrieval for African civilizations knowledge (Kemet, Mali, Axum, Songhai, Swahili, Dogon, Adinkra, …). Defaults to a **pure-TS JSON vector store** used by **VanguardModal** — no Docker required.
+
+```bash
+ollama pull nomic-embed-text
+cd frontend
+npm install
+npm run rag:seed          # builds frontend/.data/holokai-vectors.json
+npm run rag:list          # catalog of African history sources
+npm run dev
+```
+
+### Docker: Qdrant + Ollama
+
+```bash
+# From repo root
+docker compose --profile qdrant-ollama up -d
+# Qdrant http://localhost:6333 · Ollama http://localhost:11434
+# (auto-pulls nomic-embed-text)
+
+# frontend/.env.local
+# HOLAKAI_VECTOR_BACKEND=qdrant
+# QDRANT_URL=http://localhost:6333
+# OLLAMA_URL=http://localhost:11434
+
+cd frontend && npm run rag:seed:clear
+```
+
+Optional Chroma on port **8001** (keeps FastAPI free on 8000):
+
+```bash
+docker compose --profile chroma up -d
+# set HOLAKAI_VECTOR_BACKEND=chroma and CHROMA_URL=http://localhost:8001
+```
+
+Full guide: [docs/RAG.md](docs/RAG.md) · env template: `frontend/.env.example`
+
+### Python agents (same embeddings as Vanguard)
+
+Multi-agent core (`holokai_backend.py`) retrieves via **Ollama `nomic-embed-text` + Chroma**, aligned with the frontend.
+
+```bash
+ollama pull nomic-embed-text
+pip install -r requirements.txt
+python seed_knowledge.py --force
+python main.py
+# GET  http://localhost:8000/api/rag/status
+# POST http://localhost:8000/api/rag/seed?force=true
+```
+
 ## Try asking
 
 1. **"Tell me about Sungbo's Eredo"** — Triggers all four domain agents (Historian, Archaeologist, Anthropologist, Linguist) for multi-perspective synthesis of a West African monument.

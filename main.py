@@ -9,8 +9,9 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from holokai_backend import CivilizationCore
@@ -33,7 +34,7 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# CORS – allow local React development
+# CORS – local Next.js + Vite; credentials off so wildcard-safe origins work
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -41,9 +42,11 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
-        "*",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
     ],
-    allow_credentials=True,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -68,6 +71,18 @@ class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000, description="User query")
 
 
+class RagRetrieveRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    k: int = Field(5, ge=1, le=20)
+    domain: str | None = Field(
+        None,
+        description="Optional agent domain: historian | archaeology | anthropology | linguistics | ethics",
+    )
+    min_score: float = Field(0.28, ge=0.0, le=1.0)
+    empire: str | None = None
+    source: str | None = None
+
+
 class QueryResponse(BaseModel):
     title: str
     query: str
@@ -79,6 +94,13 @@ class QueryResponse(BaseModel):
     safety_notes: list
     emotions: dict
     greeting_animation: str | None = None
+
+
+class TTSRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=3000)
+    voice: str = "en-US-GuyNeural"
+    rate: float = 1.0
+    pitch: float = 1.0
 
 
 class ChatMessage(BaseModel):
@@ -125,11 +147,138 @@ def add_to_history(role: str, content: str, **kwargs):
 # ----------------------------------------------------------------------
 @app.get("/health")
 async def health():
+    rag = getattr(core, "rag_status", {}) or {}
+    err = rag.get("error")
+    hint = None
+    if err and "chromadb" in str(err).lower():
+        hint = "pip install -r requirements.txt  # needs chromadb for vector RAG"
+    elif err and "ollama" in str(err).lower():
+        hint = "ollama pull nomic-embed-text && ensure Ollama is running"
+    elif not rag.get("ready") and rag.get("enabled"):
+        hint = "POST /api/rag/seed or: python seed_knowledge.py"
+
     return {
         "status": "ok",
         "service": "HoloKai Civilization Core",
-        "version": "2.0.0",
+        "version": "2.1.0",
+        "vector_rag": {
+            "ready": bool(rag.get("ready")),
+            "enabled": bool(rag.get("enabled")),
+            "error": err,
+            "hint": hint,
+            "model": (rag.get("store") or {}).get("embeddings", {}).get("model")
+            if isinstance(rag.get("store"), dict)
+            else None,
+            "count": (rag.get("store") or {}).get("count")
+            if isinstance(rag.get("store"), dict)
+            else None,
+        },
     }
+
+
+@app.get("/api/rag/status")
+async def rag_status():
+    """Python agent vector RAG status (Ollama nomic-embed-text + Chroma)."""
+    try:
+        from embeddings_ollama import check_embeddings
+
+        embeddings = check_embeddings()
+    except Exception as exc:
+        embeddings = {"ok": False, "error": str(exc)}
+
+    store = None
+    if getattr(core, "kb", None) is not None:
+        try:
+            store = core.kb.status()
+        except Exception as exc:
+            store = {"error": str(exc)}
+
+    return {
+        "service": "HoloKai Python RAG",
+        "embeddings": embeddings,
+        "store": store,
+        "core": getattr(core, "rag_status", {}),
+        "ready": bool(embeddings.get("ok") and store and store.get("count", 0) > 0),
+        "aligned_with_frontend": {
+            "embed_model": "nomic-embed-text",
+            "note": "Same Ollama model as frontend/lib/rag/embeddings.js",
+        },
+    }
+
+
+@app.post("/api/rag/seed")
+async def rag_seed(force: bool = False):
+    """Seed / re-seed Python Chroma collection from comprehensive + knowledge files."""
+    try:
+        from knowledge_base import KnowledgeBase, ensure_seeded
+
+        kb = core.kb or KnowledgeBase()
+        summary = ensure_seeded(kb, force=force)
+        core.kb = kb
+        # Re-bind agents to the seeded KB
+        for agent in core.agents.values():
+            if hasattr(agent, "kb"):
+                agent.kb = kb
+        core.rag_status = {
+            "enabled": True,
+            "ready": kb.count() > 0,
+            "store": kb.status(),
+            "seed": summary,
+        }
+        return {"ok": True, **summary, "status": kb.status()}
+    except Exception as exc:
+        logger.exception("RAG seed failed")
+        raise HTTPException(
+            status_code=503,
+            detail=f"{exc}. Ensure Ollama is running and nomic-embed-text is pulled.",
+        ) from exc
+
+
+@app.post("/api/rag/retrieve")
+async def rag_retrieve(payload: RagRetrieveRequest):
+    """
+    Semantic retrieve for frontend / tools — same nomic-embed-text space as agents.
+    Does not run the full multi-agent supervisor (use POST /api/query for that).
+    """
+    if core.kb is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Vector knowledge base not loaded. POST /api/rag/seed first.",
+        )
+    try:
+        chunks = core.kb.retrieve(
+            payload.query,
+            domain=payload.domain,
+            top_k=payload.k,
+            min_score=payload.min_score,
+            empire=payload.empire,
+            source=payload.source,
+        )
+        contexts = [
+            {
+                "content": c["text"],
+                "score": c.get("score"),
+                "title": (c.get("metadata") or {}).get("title")
+                or (c.get("metadata") or {}).get("source")
+                or "Knowledge",
+                "metadata": c.get("metadata") or {},
+            }
+            for c in chunks
+        ]
+        prompt_parts = []
+        for ctx in contexts:
+            prompt_parts.append(f"[{ctx['title']}]\n{ctx['content']}")
+        return {
+            "query": payload.query,
+            "count": len(contexts),
+            "contexts": contexts,
+            "prompt": "\n\n---\n\n".join(prompt_parts),
+            "backend": "python-chroma",
+            "embeddings": core.kb.embedder.status() if hasattr(core.kb, "embedder") else None,
+        }
+    except Exception as exc:
+        logger.exception("RAG retrieve failed")
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/api/query", response_model=QueryResponse)
@@ -171,6 +320,57 @@ async def process_query(payload: QueryRequest) -> Dict[str, Any]:
 @app.get("/api/history")
 async def get_history():
     return {"history": chat_history, "count": len(chat_history)}
+
+
+@app.post("/api/stt")
+async def speech_to_text(file: UploadFile = File(...)):
+    """Speech-to-text via faster-whisper (runs locally, no cloud)."""
+    try:
+        from faster_whisper import WhisperModel
+
+        model = WhisperModel("base", device="cpu", compute_type="int8")
+        audio_bytes = await file.read()
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+        try:
+            segments, info = model.transcribe(tmp_path, beam_size=5)
+            text = " ".join(seg.text for seg in segments)
+        finally:
+            os.unlink(tmp_path)
+        return {"text": text.strip(), "language": info.language, "duration": info.duration}
+    except ImportError:
+        return {"text": "", "language": "en", "duration": 0, "error": "faster-whisper not installed on server"}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/tts")
+async def text_to_speech(payload: TTSRequest):
+    """Text-to-speech via edge-tts (Microsoft neural voices, local)."""
+    try:
+        import edge_tts
+        import io
+
+        rate_str = f"+{int((payload.rate - 1) * 100)}%" if payload.rate >= 1 else f"{int((1 - payload.rate) * 100)}%"
+        pitch_str = f"+{int((payload.pitch - 1) * 25)}Hz" if payload.pitch >= 1 else f"-{int((1 - payload.pitch) * 25)}Hz"
+        communicate = edge_tts.Communicate(
+            payload.text,
+            voice=payload.voice,
+            rate=rate_str,
+            pitch=pitch_str,
+        )
+        buf = io.BytesIO()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                buf.write(chunk["data"])
+        audio_bytes = buf.getvalue()
+        return Response(content=audio_bytes, media_type="audio/mpeg")
+    except ImportError:
+        raise HTTPException(status_code=503, detail="edge-tts not installed on server")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.delete("/api/history")

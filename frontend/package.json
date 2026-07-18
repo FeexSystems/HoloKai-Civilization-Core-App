@@ -5,7 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "rag:seed": "node scripts/seed-knowledge.mjs",
+    "rag:seed:clear": "node scripts/seed-knowledge.mjs --clear",
+    "rag:seed:api": "node scripts/seed-knowledge.mjs --api",
+    "rag:list": "node scripts/seed-knowledge.mjs --list",
+    "rag:status": "node scripts/seed-knowledge.mjs --status",
+    "rag:status:api": "node -e \"fetch('http://localhost:3000/api/rag/status').then(r=>r.json()).then(console.log).catch(e=>{console.error(e);process.exit(1)})\""
   },
   "dependencies": {
     "@splinetool/react-spline": "^4.1.0",

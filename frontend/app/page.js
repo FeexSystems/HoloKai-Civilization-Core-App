@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Spline from '@splinetool/react-spline'
 import { VanguardModal } from './VanguardModal'
 import { ARCHETYPES } from './archetypes'
+import { queryCore, healthCheck, getApiBase } from '../lib/holokaiApi'
 import {
   Mic, MicOff, Brain, ShieldCheck, Send,
   Cpu, HeartPulse, Radio, Database, Activity, Loader2,
@@ -12,7 +13,6 @@ import {
   Volume2, VolumeX, MessageSquare, ChevronDown, MousePointerClick, Users
 } from 'lucide-react'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 const SPLINE_SCENE = 'https://my.spline.design/cybermannequin-Im1neoFY2FTPDevqulV4LNN3/scene.splinecode'
 
 const DEFAULT_EMOTIONS = {
@@ -61,17 +61,6 @@ function playBeep(freq = 880, duration = 60) {
     osc.start(ctx.currentTime)
     osc.stop(ctx.currentTime + duration / 1000)
   } catch (e) {}
-}
-
-// ─── API Helper ────────────────────────────────────────────────────
-async function queryHoloKai(query) {
-  const res = await fetch(`${API_BASE}/api/query`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query }),
-  })
-  if (!res.ok) throw new Error(`API error ${res.status}`)
-  return res.json()
 }
 
 // ─── Spiral Background ─────────────────────────────────────────────
@@ -308,7 +297,7 @@ function SynthesisDetail({ response }) {
 }
 
 // ─── Glass Nav Menu ────────────────────────────────────────────────
-function GlassNavMenu({ leftOpen, rightOpen, onToggleLeft, onToggleRight, muted, onToggleMute }) {
+function GlassNavMenu({ leftOpen, rightOpen, onToggleLeft, onToggleRight, muted, onToggleMute, backendHealth }) {
   const [pulse, setPulse] = useState(false)
 
   useEffect(() => {
@@ -317,6 +306,20 @@ function GlassNavMenu({ leftOpen, rightOpen, onToggleLeft, onToggleRight, muted,
   }, [])
 
   const handleClick = (action) => { playBeep(1200, 40); action() }
+
+  const online = backendHealth?.online
+  const ragReady = backendHealth?.vectorReady
+  const statusLabel = !online ? 'CORE OFF' : ragReady ? 'CORE+RAG' : 'CORE'
+  const statusColor = !online
+    ? 'border-red-500/30 text-red-400'
+    : ragReady
+      ? 'border-emerald-500/30 text-emerald-400'
+      : 'border-amber-500/30 text-amber-400'
+  const dotColor = !online
+    ? 'bg-red-400'
+    : ragReady
+      ? 'bg-emerald-400'
+      : 'bg-amber-400'
 
   return (
     <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
@@ -328,13 +331,20 @@ function GlassNavMenu({ leftOpen, rightOpen, onToggleLeft, onToggleRight, muted,
       >
         {leftOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
       </button>
-      <div className={`glass-panel px-3 py-1.5 rounded-full border border-amber-500/20 flex items-center gap-2 transition-all duration-300 ${
-        pulse ? 'border-amber-500/40 shadow-[0_0_8px_rgba(245,158,11,0.15)]' : ''
-      }`}>
-        <div className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
-          pulse ? 'bg-amber-400 scale-125' : 'bg-emerald-400'
+      <div
+        title={
+          online
+            ? `Backend online${ragReady ? ` · RAG ${backendHealth.vectorCount ?? ''} chunks` : ' · RAG not seeded'}`
+            : `Backend offline (${getApiBase()}). Run: python main.py`
+        }
+        className={`glass-panel px-3 py-1.5 rounded-full border flex items-center gap-2 transition-all duration-300 ${statusColor} ${
+          pulse && online ? 'shadow-[0_0_8px_rgba(245,158,11,0.15)]' : ''
+        }`}
+      >
+        <div className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${dotColor} ${
+          pulse && online ? 'scale-125' : ''
         }`} />
-        <span className="text-[10px] font-mono text-amber-400/80 tracking-wider">LIVE</span>
+        <span className="text-[10px] font-mono tracking-wider">{statusLabel}</span>
       </div>
       <button
         onClick={() => handleClick(onToggleMute)}
@@ -372,6 +382,7 @@ export default function HoloKaiPage() {
   const [vanguardOpen, setVanguardOpen] = useState(false)
   const [vanguardArchetype, setVanguardArchetype] = useState('oluwa-core')
   const [selectedArchetype, setSelectedArchetype] = useState(null)
+  const [backendHealth, setBackendHealth] = useState({ online: false })
   const chatEndRef = useRef(null)
   const chatContainerRef = useRef(null)
 
@@ -380,6 +391,18 @@ export default function HoloKaiPage() {
   }, [autoScroll])
 
   useEffect(() => { scrollToBottom() }, [chatMessages, scrollToBottom])
+
+  // Poll Civilization Core health
+  useEffect(() => {
+    let cancelled = false
+    const tick = async () => {
+      const h = await healthCheck()
+      if (!cancelled) setBackendHealth(h)
+    }
+    tick()
+    const id = setInterval(tick, 12000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [])
 
   const handleScroll = useCallback(() => {
     const c = chatContainerRef.current
@@ -397,11 +420,12 @@ export default function HoloKaiPage() {
     setChatMessages(prev => [...prev, userMsg])
 
     try {
-      const data = await queryHoloKai(query.trim())
+      const data = await queryCore(query.trim())
       setActiveAgents(data.active_agents || [])
       setCurrentEmotions(data.emotions || DEFAULT_EMOTIONS)
       setCurrentResponse(data)
       setSystemState('speaking')
+      setBackendHealth(prev => ({ ...prev, online: true }))
 
       if (data.greeting_animation) {
         setGreetingAnimation(data.greeting_animation)
@@ -409,18 +433,151 @@ export default function HoloKaiPage() {
       }
 
       const assistantMsg = {
-        id: `assistant_${Date.now()}`, role: 'assistant',
+        id: `assistant_${Date.now()}`,
+        role: 'assistant',
         content: data.summary || 'Analysis complete.',
         timestamp: new Date().toISOString(),
         fragments: data.fragments || [],
         active_agents: data.active_agents || [],
         emotions: data.emotions || {},
+        title: data.title,
+        confidence: data.confidence,
+        safety_notes: data.safety_notes,
+        trace_id: data.trace_id,
       }
       setChatMessages(prev => [...prev, assistantMsg])
       setTimeout(() => setSystemState('idle'), 2600)
     } catch (err) {
-      setError(err.message || 'Failed to reach HoloKai core')
-      setSystemState('idle')
+      // Offline / core-down path: local Next RAG, then public knowledge files
+      try {
+        let contexts = []
+        try {
+          const res = await fetch('/api/rag/retrieve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: query.trim(), k: 4 }),
+          })
+          if (res.ok) {
+            const offlinePayload = await res.json()
+            contexts = offlinePayload.contexts || []
+          }
+        } catch {
+          /* vector path optional when Ollama is down */
+        }
+
+        // Keyword fallback over static knowledge files (works without Ollama)
+        if (!contexts.length) {
+          const q = query.toLowerCase()
+          const candidates = [
+            ['kemet', 'egypt', 'maat', 'pharaoh'],
+            ['mali', 'mansa', 'timbuktu'],
+            ['ubuntu'],
+            ['ifa', 'orisha'],
+            ['adinkra', 'sankofa'],
+            ['zimbabwe'],
+            ['nubia', 'kush'],
+            ['axum', 'aksum'],
+            ['songhai'],
+            ['swahili', 'kilwa'],
+            ['carthage', 'hannibal'],
+            ['benin', 'bronze'],
+            ['dogon'],
+            ['nsibidi'],
+          ]
+          const fileFor = (keys) => {
+            if (keys.includes('kemet') || keys.includes('egypt') || keys.includes('maat') || keys.includes('pharaoh')) return '/knowledge/kemet.txt'
+            if (keys.includes('mali') || keys.includes('mansa') || keys.includes('timbuktu')) return '/knowledge/mali-empire.txt'
+            if (keys.includes('ubuntu')) return '/knowledge/ubuntu-philosophy.txt'
+            if (keys.includes('ifa') || keys.includes('orisha')) return '/knowledge/ifa-divination.txt'
+            if (keys.includes('adinkra') || keys.includes('sankofa')) return '/knowledge/adinkra-symbols.txt'
+            if (keys.includes('zimbabwe')) return '/knowledge/great-zimbabwe.txt'
+            if (keys.includes('nubia') || keys.includes('kush')) return '/knowledge/nubia-kush.txt'
+            if (keys.includes('axum') || keys.includes('aksum')) return '/knowledge/axum-empire.txt'
+            if (keys.includes('songhai')) return '/knowledge/songhai-empire.txt'
+            if (keys.includes('swahili') || keys.includes('kilwa')) return '/knowledge/swahili-coast.txt'
+            if (keys.includes('carthage') || keys.includes('hannibal')) return '/knowledge/carthage.txt'
+            if (keys.includes('benin') || keys.includes('bronze')) return '/knowledge/benin-bronzes.txt'
+            if (keys.includes('dogon')) return '/knowledge/dogon-cosmology.txt'
+            if (keys.includes('nsibidi')) return '/knowledge/nsibidi-writing.txt'
+            return null
+          }
+          for (const keys of candidates) {
+            if (keys.some((k) => q.includes(k))) {
+              const path = fileFor(keys)
+              if (!path) continue
+              try {
+                const fr = await fetch(path)
+                if (fr.ok) {
+                  const text = await fr.text()
+                  contexts.push({
+                    title: path.split('/').pop().replace('.txt', '').replace(/-/g, ' '),
+                    content: text.slice(0, 1200),
+                    score: 0.55,
+                  })
+                }
+              } catch {
+                /* ignore missing file */
+              }
+            }
+          }
+          if (!contexts.length) {
+            // Soft default: Kemet + Ubuntu so offline chat still teaches something
+            for (const path of ['/knowledge/kemet.txt', '/knowledge/ubuntu-philosophy.txt']) {
+              try {
+                const fr = await fetch(path)
+                if (fr.ok) {
+                  const text = await fr.text()
+                  contexts.push({
+                    title: path.split('/').pop().replace('.txt', '').replace(/-/g, ' '),
+                    content: text.slice(0, 900),
+                    score: 0.3,
+                  })
+                }
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+        }
+
+        if (contexts.length) {
+          const summary = contexts
+            .map((c) => `**${c.title || 'Source'}**\n${(c.content || '').slice(0, 500)}`)
+            .join('\n\n')
+          const assistantMsg = {
+            id: `assistant_${Date.now()}`,
+            role: 'assistant',
+            content:
+              `*[Local ancestral memory — core offline]*\n\n${summary}\n\n_Start the core with \`python main.py\` for multi-agent synthesis._`,
+            timestamp: new Date().toISOString(),
+            fragments: contexts.map((c) => ({
+              content: c.content,
+              agent_origin: 'Local Knowledge',
+              source_type: 'offline',
+              confidence: c.score,
+            })),
+            active_agents: ['Local Knowledge'],
+            emotions: DEFAULT_EMOTIONS,
+            title: 'Local Knowledge Retrieval',
+            confidence: contexts[0]?.score ?? 0.5,
+          }
+          setChatMessages(prev => [...prev, assistantMsg])
+          setActiveAgents(['Local Knowledge'])
+          setCurrentResponse(assistantMsg)
+          setSystemState('speaking')
+          setTimeout(() => setSystemState('idle'), 2000)
+          setError('Civilization Core offline — answered from local knowledge files.')
+          setBackendHealth(prev => ({ ...prev, online: false, error: err.message }))
+        } else {
+          setError(err.message || 'Failed to reach HoloKai core')
+          setSystemState('idle')
+          setBackendHealth(prev => ({ ...prev, online: false, error: err.message }))
+        }
+      } catch (offlineErr) {
+        setError(err.message || offlineErr.message || 'Failed to reach HoloKai core')
+        setSystemState('idle')
+        setBackendHealth(prev => ({ ...prev, online: false, error: err.message }))
+      }
     } finally {
       setIsLoading(false)
     }
@@ -482,6 +639,7 @@ export default function HoloKaiPage() {
         onToggleRight={() => { playBeep(); setRightPanelOpen(p => !p) }}
         muted={muted}
         onToggleMute={() => setMuted(m => !m)}
+        backendHealth={backendHealth}
       />
 
       {/* Header */}
@@ -532,7 +690,12 @@ export default function HoloKaiPage() {
               {ARCHETYPES.map((arch) => (
                 <button
                   key={arch.id}
-                  onClick={() => { playBeep(880, 40); setSelectedArchetype(arch.id); setVanguardArchetype(arch.id); setVanguardOpen(false) }}
+                  onClick={() => {
+                    playBeep(880, 40)
+                    setSelectedArchetype(arch.id)
+                    setVanguardArchetype(arch.id)
+                    setVanguardOpen(true)
+                  }}
                   className={`glass-panel rounded-2xl p-3 border text-left transition-all duration-200 hover:scale-[1.02] ${
                     selectedArchetype === arch.id
                       ? 'border-amber-500/40 bg-amber-500/10'
@@ -564,7 +727,11 @@ export default function HoloKaiPage() {
           isOpen={vanguardOpen}
           onClose={() => { setVanguardOpen(false); setSelectedArchetype(null) }}
           archetype={vanguardArchetype}
-          onAnimationTrigger={(arch) => {
+          onArchetypeChange={(id) => {
+            setSelectedArchetype(id)
+            setVanguardArchetype(id)
+          }}
+          onAnimationTrigger={() => {
             setGreetingAnimation('wave')
             setTimeout(() => setGreetingAnimation(null), 2000)
           }}
@@ -736,6 +903,28 @@ export default function HoloKaiPage() {
           rightPanelOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 lg:w-0 lg:opacity-0 lg:overflow-hidden'
         }`}>
           <div className="h-full glass-panel border-l border-white/5 p-4 flex flex-col overflow-hidden">
+            <div className="mb-3 glass-panel rounded-xl p-3 border border-white/5 text-[10px] font-mono space-y-1">
+              <div className="flex items-center justify-between text-zinc-400">
+                <span>API</span>
+                <span className={backendHealth.online ? 'text-emerald-400' : 'text-red-400'}>
+                  {backendHealth.online ? 'online' : 'offline'}
+                </span>
+              </div>
+              <div className="text-zinc-600 truncate" title={getApiBase()}>{getApiBase()}</div>
+              <div className="flex items-center justify-between text-zinc-400">
+                <span>Vector RAG</span>
+                <span className={backendHealth.vectorReady ? 'text-emerald-400' : 'text-amber-400'}>
+                  {backendHealth.vectorReady
+                    ? `${backendHealth.vectorCount ?? 'ready'}`
+                    : backendHealth.online
+                      ? 'seed needed'
+                      : '—'}
+                </span>
+              </div>
+              {backendHealth.vectorModel && (
+                <div className="text-zinc-600">embed · {backendHealth.vectorModel}</div>
+              )}
+            </div>
             <div className="flex items-center gap-2 mb-4">
               <Database className="w-4 h-4 text-amber-400" />
               <span className="text-[10px] font-medium tracking-widest text-zinc-400 uppercase">Synthesis Report</span>

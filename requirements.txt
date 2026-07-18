@@ -1,0 +1,16 @@
+# HoloKai Civilization Core — Python backend
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0
+python-dotenv>=1.0.0
+openai>=1.0.0
+
+# Vector RAG (aligned with frontend Ollama nomic-embed-text)
+# chromadb is OPTIONAL — without it, KnowledgeBase uses pure-Python JSON cosine store.
+# On Windows, chromadb often needs MSVC Build Tools (chroma-hnswlib). Prefer Docker Chroma
+# or the JSON fallback if pip install fails.
+# chromadb>=0.5.0,<1.0.0
+
+# Optional offline embed fallback (only if HOLAKAI_EMBED_FALLBACK=minilm)
+# sentence-transformers>=2.2.0
+# torch  # heavy; install only if using MiniLM fallback

@@ -1,68 +1,76 @@
-from knowledge_base import KnowledgeBase
+#!/usr/bin/env python3
+"""
+Seed HoloKai Python vector knowledge base (Ollama nomic-embed-text + Chroma).
 
-kb = KnowledgeBase()
+Prerequisites:
+  ollama pull nomic-embed-text
+  pip install -r requirements.txt
 
-documents = [
-    # --- Sungbo’s Eredo ---
-    {
-        "text": "Sungbo’s Eredo is one of the largest earthwork complexes in West Africa, located in the Ijebu region of southwestern Nigeria. It consists of massive ditches and embankments that stretch for over 160 kilometers.",
-        "metadata": {
-            "domain": "archaeology",
-            "source": "Archaeological surveys",
-            "title": "Sungbo’s Eredo – Scale"
-        }
-    },
-    {
-        "text": "Oral traditions among the Ijebu people associate the construction of the Eredo with a legendary noblewoman known as Bilikisu Sungbo. These traditions emphasize communal labor, spiritual protection, and founding narratives.",
-        "metadata": {
-            "domain": "anthropology",
-            "source": "Local oral histories",
-            "title": "Sungbo Oral Traditions"
-        }
-    },
-    {
-        "text": "In local Yoruba usage, the term ‘Eredo’ refers to a large defensive trench or embankment. The name itself encodes both function and landscape form.",
-        "metadata": {
-            "domain": "linguistics",
-            "source": "Linguistic notes",
-            "title": "Meaning of Eredo"
-        }
-    },
-    {
-        "text": "Historical interpretations place Sungbo’s Eredo within the broader context of large-scale earthwork traditions in the forest zone of West Africa, demonstrating sophisticated political organization and labor mobilization.",
-        "metadata": {
-            "domain": "historian",
-            "source": "Regional historical synthesis",
-            "title": "Historical Context of the Eredo"
-        }
-    },
+Usage:
+  python seed_knowledge.py
+  python seed_knowledge.py --force     # wipe collection and re-seed
+  python seed_knowledge.py --status
+"""
 
-    # --- Mansa Musa ---
-    {
-        "text": "Mansa Musa ruled the Mali Empire from approximately 1312 to 1337. His pilgrimage to Mecca in 1324–1325 is one of the most famous journeys in medieval African history and drew widespread attention to the wealth and scholarship of West Africa.",
-        "metadata": {
-            "domain": "historian",
-            "source": "Ibn Battuta, al-Umari, modern syntheses",
-            "title": "Mansa Musa Overview"
-        }
-    },
-    {
-        "text": "Contemporary Arabic sources describe the enormous quantities of gold that Mansa Musa distributed during his pilgrimage, which temporarily affected gold prices in Cairo and the eastern Mediterranean.",
-        "metadata": {
-            "domain": "historian",
-            "source": "al-Umari",
-            "title": "Economic Impact of the Pilgrimage"
-        }
-    },
-    {
-        "text": "Discussions of Mansa Musa’s wealth should emphasize institutional achievement, support for scholarship (especially in Timbuktu), and diplomatic engagement rather than reducing the empire to stereotypes of extravagance.",
-        "metadata": {
-            "domain": "ethics",
-            "source": "Cultural protocol notes",
-            "title": "Responsible Framing of Imperial Wealth"
-        }
-    },
-]
+from __future__ import annotations
 
-kb.add_documents(documents)
-print(f"Seeded {len(documents)} documents into the knowledge base.")
+import argparse
+import json
+import logging
+import sys
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+logger = logging.getLogger("holokai.seed")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Seed HoloKai RAG knowledge base")
+    parser.add_argument("--force", action="store_true", help="Clear and re-seed")
+    parser.add_argument("--status", action="store_true", help="Print status only")
+    parser.add_argument(
+        "--persist",
+        default=None,
+        help="Chroma persist directory (default: ./holokai_chroma)",
+    )
+    args = parser.parse_args()
+
+    try:
+        from embeddings_ollama import check_embeddings
+        from knowledge_base import KnowledgeBase, ensure_seeded
+    except ImportError as exc:
+        logger.error("Import failed: %s — run pip install -r requirements.txt", exc)
+        return 1
+
+    emb = check_embeddings()
+    if not emb.get("ok"):
+        logger.error("Embeddings not ready: %s", emb.get("error"))
+        logger.error("Fix: ollama pull nomic-embed-text  (and ensure Ollama is running)")
+        return 1
+
+    print(json.dumps({"embeddings": emb}, indent=2))
+
+    kwargs = {}
+    if args.persist:
+        kwargs["persist_directory"] = args.persist
+
+    try:
+        kb = KnowledgeBase(**kwargs)
+    except Exception as exc:
+        logger.error("Failed to open KnowledgeBase: %s", exc)
+        return 1
+
+    if args.status:
+        print(json.dumps(kb.status(), indent=2))
+        return 0
+
+    summary = ensure_seeded(kb, force=args.force)
+    print(json.dumps(summary, indent=2))
+    print(f"\n✓ Ancestral memory ready · {kb.count()} chunks · {kb.collection_name}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

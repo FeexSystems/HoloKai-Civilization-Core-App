@@ -80,35 +80,93 @@ class Agent(Protocol):
 
 
 class BaseAgent:
-    def __init__(self, name: str, domain: str):
+    def __init__(
+        self,
+        name: str,
+        domain: str,
+        knowledge_base: Any = None,
+        domain_key: str | None = None,
+    ):
         self.name = name
         self.domain = domain
+        self.kb = knowledge_base
+        self.domain_key = domain_key  # historian | archaeology | anthropology | linguistics | ethics
 
     def _contains(self, query: str, keywords: List[str]) -> bool:
         q = query.lower()
         return any(k in q for k in keywords)
+
+    def _vector_fragments(
+        self,
+        query: str,
+        source_type: SourceType,
+        top_k: int = 4,
+        min_score: float = 0.32,
+    ) -> List[KnowledgeFragment]:
+        """Primary retrieval via Ollama nomic-embed-text + Chroma (shared with Vanguard)."""
+        if self.kb is None:
+            return []
+        try:
+            chunks = self.kb.retrieve(
+                query,
+                domain=self.domain_key,
+                top_k=top_k,
+                min_score=min_score,
+            )
+        except Exception as exc:
+            logger.warning("%s vector retrieve failed: %s", self.name, exc)
+            return []
+
+        fragments: List[KnowledgeFragment] = []
+        for chunk in chunks:
+            meta = chunk.get("metadata") or {}
+            conf = min(0.96, 0.68 + float(chunk.get("score", 0)) * 0.28)
+            fragments.append(
+                KnowledgeFragment(
+                    source_type=source_type,
+                    content=chunk["text"],
+                    confidence=round(conf, 3),
+                    agent_origin=self.name,
+                    citation=meta.get("source") or meta.get("title"),
+                    metadata={**meta, "retrieval": "vector", "score": chunk.get("score")},
+                )
+            )
+        return fragments
 
 
 # ----------------------------------------------------------------------
 # Concrete Agents
 # ----------------------------------------------------------------------
 class HistorianAI(BaseAgent):
-    def __init__(self):
-        super().__init__("Historian AI", "Historical timelines and kingdoms")
+    def __init__(self, knowledge_base: Any = None):
+        super().__init__(
+            "Historian AI",
+            "Historical timelines and kingdoms",
+            knowledge_base=knowledge_base,
+            domain_key="historian",
+        )
 
     def _search_kb(self, query: str) -> List[KnowledgeFragment]:
+        # Vector-first (Ollama nomic); keyword comprehensive KB as soft backfill
+        fragments = self._vector_fragments(query, SourceType.HISTORICAL_CONSENSUS, top_k=4)
+        if len(fragments) >= 2:
+            return fragments
+
         entries = get_entries_by_domain("historian")
-        fragments = []
         q = query.lower()
+        seen = {f.content for f in fragments}
         for entry in entries:
             if any(word in q for word in entry["text"].lower().split() if len(word) > 3):
                 if any(kw in q for kw in entry["metadata"].get("title", "").lower().split()):
+                    if entry["text"] in seen:
+                        continue
                     fragments.append(KnowledgeFragment(
                         source_type=SourceType.HISTORICAL_CONSENSUS,
                         content=entry["text"],
                         confidence=0.91,
                         agent_origin=self.name,
                         citation=entry["metadata"].get("source"),
+                        metadata={**(entry.get("metadata") or {}), "retrieval": "keyword"},
                     ))
         return fragments
 
@@ -174,21 +232,33 @@ class HistorianAI(BaseAgent):
 
 
 class ArchaeologistAI(BaseAgent):
-    def __init__(self):
-        super().__init__("Archaeologist AI", "Physical evidence and sites")
+    def __init__(self, knowledge_base: Any = None):
+        super().__init__(
+            "Archaeologist AI",
+            "Physical evidence and sites",
+            knowledge_base=knowledge_base,
+            domain_key="archaeology",
+        )
 
     def _search_kb(self, query: str) -> List[KnowledgeFragment]:
+        fragments = self._vector_fragments(query, SourceType.ARCHAEOLOGICAL_EVIDENCE, top_k=4)
+        if len(fragments) >= 2:
+            return fragments
+
         entries = get_entries_by_domain("archaeology")
-        fragments = []
         q = query.lower()
+        seen = {f.content for f in fragments}
         for entry in entries:
             if any(kw in q for kw in entry["metadata"].get("title", "").lower().split()):
+                if entry["text"] in seen:
+                    continue
                 fragments.append(KnowledgeFragment(
                     source_type=SourceType.ARCHAEOLOGICAL_EVIDENCE,
                     content=entry["text"],
                     confidence=0.90,
                     agent_origin=self.name,
                     citation=entry["metadata"].get("source"),
+                    metadata={**(entry.get("metadata") or {}), "retrieval": "keyword"},
                 ))
         return fragments
 
@@ -242,21 +312,33 @@ class ArchaeologistAI(BaseAgent):
 
 
 class AnthropologistAI(BaseAgent):
-    def __init__(self):
-        super().__init__("Anthropologist AI", "Culture, protocols, and oral histories")
+    def __init__(self, knowledge_base: Any = None):
+        super().__init__(
+            "Anthropologist AI",
+            "Culture, protocols, and oral histories",
+            knowledge_base=knowledge_base,
+            domain_key="anthropology",
+        )
 
     def _search_kb(self, query: str) -> List[KnowledgeFragment]:
+        fragments = self._vector_fragments(query, SourceType.ORAL_TRADITION, top_k=4)
+        if len(fragments) >= 2:
+            return fragments
+
         entries = get_entries_by_domain("anthropology")
-        fragments = []
         q = query.lower()
+        seen = {f.content for f in fragments}
         for entry in entries:
             if any(kw in q for kw in entry["metadata"].get("title", "").lower().split()):
+                if entry["text"] in seen:
+                    continue
                 fragments.append(KnowledgeFragment(
                     source_type=SourceType.ORAL_TRADITION,
                     content=entry["text"],
                     confidence=0.90,
                     agent_origin=self.name,
                     citation=entry["metadata"].get("source"),
+                    metadata={**(entry.get("metadata") or {}), "retrieval": "keyword"},
                 ))
         return fragments
 
@@ -296,23 +378,41 @@ class AnthropologistAI(BaseAgent):
 
 
 class LinguistAI(BaseAgent):
-    def __init__(self):
-        super().__init__("Linguist AI", "African languages and reconstruction")
+    def __init__(self, knowledge_base: Any = None):
+        super().__init__(
+            "Linguist AI",
+            "African languages and reconstruction",
+            knowledge_base=knowledge_base,
+            domain_key="linguistics",
+        )
 
     def _search_kb(self, query: str) -> List[KnowledgeFragment]:
-        entries = get_entries_by_domain("anthropology")
-        fragments = []
+        fragments = self._vector_fragments(
+            query, SourceType.LINGUISTIC_RECONSTRUCTION, top_k=3
+        )
+        if len(fragments) >= 2:
+            return fragments
+
+        entries = get_entries_by_domain("linguistics")
+        if not entries:
+            entries = get_entries_by_domain("anthropology")
         q = query.lower()
+        seen = {f.content for f in fragments}
         for entry in entries:
             title = entry["metadata"].get("title", "").lower()
-            if any(kw in title for kw in ["nsibidi", "writing", "language", "divination", "binary"]):
-                if any(kw in q for kw in title.split()):
+            if any(kw in title for kw in ["nsibidi", "writing", "language", "divination", "binary", "adinkra"]):
+                if any(kw in q for kw in title.split()) or any(
+                    kw in q for kw in ["nsibidi", "adinkra", "script", "language"]
+                ):
+                    if entry["text"] in seen:
+                        continue
                     fragments.append(KnowledgeFragment(
                         source_type=SourceType.LINGUISTIC_RECONSTRUCTION,
                         content=entry["text"],
                         confidence=0.89,
                         agent_origin=self.name,
                         citation=entry["metadata"].get("source"),
+                        metadata={**(entry.get("metadata") or {}), "retrieval": "keyword"},
                     ))
         return fragments
 
@@ -350,21 +450,33 @@ class LinguistAI(BaseAgent):
 
 
 class EthicistAI(BaseAgent):
-    def __init__(self):
-        super().__init__("Ethicist AI", "Cultural protocols and responsible synthesis")
+    def __init__(self, knowledge_base: Any = None):
+        super().__init__(
+            "Ethicist AI",
+            "Cultural protocols and responsible synthesis",
+            knowledge_base=knowledge_base,
+            domain_key="ethics",
+        )
 
     def _search_kb(self, query: str) -> List[KnowledgeFragment]:
+        fragments = self._vector_fragments(query, SourceType.CULTURAL_PROTOCOL, top_k=3)
+        if len(fragments) >= 2:
+            return fragments
+
         entries = get_entries_by_domain("ethics")
-        fragments = []
         q = query.lower()
+        seen = {f.content for f in fragments}
         for entry in entries:
             if any(kw in q for kw in entry["metadata"].get("title", "").lower().split()):
+                if entry["text"] in seen:
+                    continue
                 fragments.append(KnowledgeFragment(
                     source_type=SourceType.CULTURAL_PROTOCOL,
                     content=entry["text"],
                     confidence=0.91,
                     agent_origin=self.name,
                     citation=entry["metadata"].get("source"),
+                    metadata={**(entry.get("metadata") or {}), "retrieval": "keyword"},
                 ))
         return fragments
 
@@ -673,13 +785,75 @@ class LLMSupervisor:
 # Main Orchestrator
 # ----------------------------------------------------------------------
 class CivilizationCore:
-    def __init__(self):
+    def __init__(self, enable_vector_rag: bool | None = None):
+        """
+        Multi-agent core. When vector RAG is enabled (default), agents retrieve via
+        Ollama nomic-embed-text + Chroma — the same embedding model as frontend Vanguard RAG.
+        """
+        if enable_vector_rag is None:
+            enable_vector_rag = os.getenv("HOLAKAI_VECTOR_RAG", "1").strip() not in (
+                "0",
+                "false",
+                "no",
+                "off",
+            )
+
+        self.kb = None
+        self.rag_status: Dict[str, Any] = {"enabled": False, "ready": False}
+
+        if enable_vector_rag:
+            try:
+                from knowledge_base import KnowledgeBase, ensure_seeded
+
+                self.kb = KnowledgeBase()
+                # Seed only when empty; failures must not kill multi-agent core
+                seed_summary: Dict[str, Any] = {"skipped": True}
+                try:
+                    if self.kb.count() == 0:
+                        seed_summary = ensure_seeded(self.kb, force=False)
+                    else:
+                        seed_summary = {
+                            "skipped": True,
+                            "count": self.kb.count(),
+                            "reason": "already seeded",
+                        }
+                except Exception as seed_exc:
+                    logger.warning("Auto-seed deferred (%s)", seed_exc)
+                    seed_summary = {"skipped": True, "error": str(seed_exc)}
+
+                self.rag_status = {
+                    "enabled": True,
+                    "ready": self.kb.count() > 0,
+                    "store": self.kb.status(),
+                    "seed": seed_summary,
+                }
+                logger.info(
+                    "Vector RAG online · backend=%s · %s chunks · %s",
+                    getattr(self.kb, "backend", "?"),
+                    self.kb.count(),
+                    self.kb.embedder.model,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Vector RAG unavailable (%s) — agents will use keyword/comprehensive fallback",
+                    exc,
+                )
+                self.rag_status = {
+                    "enabled": True,
+                    "ready": False,
+                    "error": str(exc),
+                    "hint": (
+                        "Start Ollama and pull nomic-embed-text. "
+                        "chromadb is optional (JSON vector store is used if missing)."
+                    ),
+                }
+
         self.agents: Dict[str, Agent] = {
-            "Historian AI": HistorianAI(),
-            "Archaeologist AI": ArchaeologistAI(),
-            "Anthropologist AI": AnthropologistAI(),
-            "Linguist AI": LinguistAI(),
-            "Ethicist AI": EthicistAI(),
+            "Historian AI": HistorianAI(knowledge_base=self.kb),
+            "Archaeologist AI": ArchaeologistAI(knowledge_base=self.kb),
+            "Anthropologist AI": AnthropologistAI(knowledge_base=self.kb),
+            "Linguist AI": LinguistAI(knowledge_base=self.kb),
+            "Ethicist AI": EthicistAI(knowledge_base=self.kb),
         }
         self.supervisor = LLMSupervisor()
         self.ethic_engine = EthicEngine()
