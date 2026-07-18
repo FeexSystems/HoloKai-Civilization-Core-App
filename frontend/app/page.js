@@ -483,7 +483,7 @@ export default function HoloKaiPage() {
       <header className="relative z-20 flex items-center justify-between px-6 py-3 border-b border-white/5">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <img src="/favicon.svg" alt="HoloKai" className="w-10 h-10 rounded-xl" />
+            <img src="/Holokai-favicon.ico" alt="HoloKai" className="w-10 h-10 rounded-xl" />
             <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
           </div>
           <div>
@@ -567,7 +567,7 @@ export default function HoloKaiPage() {
                 <div className="flex flex-col items-center justify-center h-full min-h-[40vh] text-center pointer-events-auto">
                   <div className="relative mb-6">
                     <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-500/10 to-amber-700/5 border border-amber-500/15 flex items-center justify-center animate-glow-pulse overflow-hidden">
-                      <img src="/favicon.svg" alt="HoloKai" className="w-16 h-16" />
+                      <img src="/Holokai-favicon.ico" alt="HoloKai" className="w-16 h-16" />
                     </div>
                     <div className="absolute inset-0 w-20 h-20 border border-amber-500/10 rounded-full animate-pulse" />
                   </div>
