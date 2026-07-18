@@ -1,6 +1,5 @@
 # HoloKai-Civilization-Core-App
 Where Civilizations Remembers
-I'll load the repo overview ability and then provide you with a comprehensive README for the HoloKai Civilization Core App repository.Now let me fetch the comprehensive readme and key source files to understand the project better:---
 
 ## What this is
 
