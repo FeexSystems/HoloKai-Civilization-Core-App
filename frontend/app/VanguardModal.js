@@ -23,6 +23,7 @@ import { useOllama } from './useOllama'
 import { useRAG } from './useRAG'
 import { useTTS } from './useTTS'
 import { useWhisper } from './useWhisper'
+import { VANGUARD_TOOLS, executeToolCall } from './tools'
 import { queryCore, fragmentsToContextPrompt } from '../lib/holokaiApi'
 
 function ParticleBurst({ active }) {
@@ -241,8 +242,34 @@ export function VanguardModal({
       const fullMessages = [{ role: 'system', content: systemPrompt }, ...messages, userMsg]
 
       let response = null
+      let toolRound = 0
+      const MAX_TOOL_ROUNDS = 3
       try {
-        response = await generate(fullMessages, true)
+        let currentMessages = fullMessages
+        while (toolRound < MAX_TOOL_ROUNDS) {
+          const result = await generate(currentMessages, true, {
+            tools: toolRound === 0 ? VANGUARD_TOOLS : undefined,
+          })
+
+          const content = typeof result === 'string' ? result : result?.content || ''
+          const toolCalls = typeof result === 'object' ? result?.toolCalls : null
+
+          if (toolCalls?.length) {
+            currentMessages = [...currentMessages, { role: 'assistant', content, tool_calls: toolCalls }]
+            for (const tc of toolCalls) {
+              const toolResult = await executeToolCall(tc, { retrieve, buildContextPrompt })
+              currentMessages.push({
+                role: 'tool',
+                content: toolResult,
+                tool_name: tc.function.name,
+              })
+            }
+            toolRound++
+          } else {
+            response = content
+            break
+          }
+        }
       } catch (ollamaErr) {
         if (coreResult?.summary) {
           response =

@@ -103,6 +103,11 @@ class TTSRequest(BaseModel):
     pitch: float = 1.0
 
 
+class WebSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=500)
+    max_results: int = Field(5, ge=1, le=10)
+
+
 class ChatMessage(BaseModel):
     id: str
     role: str
@@ -371,6 +376,61 @@ async def text_to_speech(payload: TTSRequest):
         raise HTTPException(status_code=503, detail="edge-tts not installed on server")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/web_search")
+async def web_search(payload: WebSearchRequest):
+    """Proxy to Ollama Cloud web search API (requires OLLAMA_API_KEY)."""
+    api_key = os.getenv("OLLAMA_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="OLLAMA_API_KEY not set. Get one at https://ollama.com/settings/keys",
+        )
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                "https://ollama.com/api/web_search",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"query": payload.query, "max_results": payload.max_results},
+            )
+            if not resp.is_success:
+                raise HTTPException(
+                    status_code=resp.status_code,
+                    detail=f"Ollama web search error: {resp.text[:300]}",
+                )
+            data = resp.json()
+            return {"results": data.get("results", [])}
+    except ImportError:
+        raise HTTPException(status_code=503, detail="httpx not installed. pip install httpx")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Web search failed: {exc}")
+
+
+@app.post("/api/web_fetch")
+async def web_fetch(url: str = Form(...)):
+    """Proxy to Ollama Cloud web fetch API."""
+    api_key = os.getenv("OLLAMA_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="OLLAMA_API_KEY not set")
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                "https://ollama.com/api/web_fetch",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={"url": url},
+            )
+            if not resp.is_success:
+                raise HTTPException(status_code=resp.status_code, detail=resp.text[:300])
+            return resp.json()
+    except ImportError:
+        raise HTTPException(status_code=503, detail="httpx not installed")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Web fetch failed: {exc}")
 
 
 @app.delete("/api/history")

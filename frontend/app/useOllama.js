@@ -121,12 +121,15 @@ export function useOllama({ model = DEFAULT_MODEL } = {}) {
       if (!stream) {
         const data = await res.json()
         setIsLoading(false)
-        return data.message?.content || ''
+        const content = data.message?.content || ''
+        const toolCalls = data.message?.tool_calls || null
+        return toolCalls && toolCalls.length ? { content, toolCalls } : content
       }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let fullText = ''
+      let toolCalls = null
 
       while (true) {
         const { done, value } = await reader.read()
@@ -142,6 +145,9 @@ export function useOllama({ model = DEFAULT_MODEL } = {}) {
               fullText += parsed.message.content
               setStreamingContent(fullText)
             }
+            if (parsed.message?.tool_calls?.length) {
+              toolCalls = parsed.message.tool_calls
+            }
             if (parsed.done) break
           } catch {
             /* partial JSON line */
@@ -150,6 +156,7 @@ export function useOllama({ model = DEFAULT_MODEL } = {}) {
       }
 
       setIsLoading(false)
+      if (toolCalls?.length) return { content: fullText, toolCalls }
       return fullText
     } catch (err) {
       if (err.name === 'AbortError') {
