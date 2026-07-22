@@ -1,0 +1,156 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 40 30% 95%;
+    --card: 240 10% 6%;
+    --card-foreground: 40 30% 95%;
+    --popover: 240 10% 6%;
+    --popover-foreground: 40 30% 95%;
+    --primary: 38 65% 50%;
+    --primary-foreground: 240 10% 3.9%;
+    --secondary: 240 8% 12%;
+    --secondary-foreground: 40 30% 95%;
+    --muted: 240 8% 12%;
+    --muted-foreground: 40 10% 55%;
+    --accent: 38 65% 50%;
+    --accent-foreground: 240 10% 3.9%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 40 30% 95%;
+    --border: 240 8% 14%;
+    --input: 240 8% 14%;
+    --ring: 38 65% 50%;
+    --radius: 0.625rem;
+    --font-heading: 'Syne', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    --font-display: 'Syne', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+}
+
+@layer utilities {
+  .text-gold-gradient {
+    background: linear-gradient(135deg, #FFD27A 0%, #E8B84B 40%, #C8952A 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .bg-gold-gradient {
+    background: linear-gradient(135deg, #FFD27A 0%, #E8B84B 40%, #C8952A 100%);
+  }
+
+  .glass-panel {
+    background: rgba(15, 15, 25, 0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(200, 149, 42, 0.15);
+  }
+
+  .glass-panel-light {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .gold-glow {
+    box-shadow: 0 0 40px -10px rgba(200, 149, 42, 0.4);
+  }
+
+  .orbital-radial {
+    background: radial-gradient(ellipse at center, rgba(200, 149, 42, 0.12) 0%, transparent 70%);
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(200, 149, 42, 0.25);
+    border-radius: 2px;
+  }
+}
+
+@keyframes orbit-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes orbit-rotate-reverse {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes float-gentle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+@keyframes particle-drift {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  10% { opacity: 0.6; }
+  90% { opacity: 0.6; }
+  100% { transform: translateY(-100vh) translateX(30px); opacity: 0; }
+}
+
+@keyframes portal-expand {
+  0% { transform: scale(0); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: scale(4); opacity: 0; }
+}
+
+.holokai-map .leaflet-container {
+  background: #0A0A0A !important;
+}
+.holokai-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.7) contrast(1.2);
+}
+.holokai-map .leaflet-control-attribution {
+  display: none !important;
+}
+.holokai-map .leaflet-popup-content-wrapper {
+  background: rgba(15, 15, 25, 0.95) !important;
+  color: white !important;
+  border: 1px solid rgba(200, 149, 42, 0.3) !important;
+  border-radius: 8px !important;
+}
+.holokai-map .leaflet-popup-tip {
+  background: rgba(15, 15, 25, 0.95) !important;
+}
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.animate-orbit { animation: orbit-rotate 60s linear infinite; }
+.animate-orbit-reverse { animation: orbit-rotate-reverse 80s linear infinite; }
+.animate-float-gentle { animation: float-gentle 6s ease-in-out infinite; }
+.animate-pulse-glow { animation: pulse-glow 4s ease-in-out infinite; }
+.animate-particle { animation: particle-drift 20s linear infinite; }
+.animate-portal { animation: portal-expand 2s ease-out forwards; }
+.animate-scan { animation: scan-line 3s linear infinite; }

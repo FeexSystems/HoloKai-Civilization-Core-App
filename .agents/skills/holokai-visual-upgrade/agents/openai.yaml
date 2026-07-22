@@ -1,0 +1,4 @@
+interface:
+  display_name: "HoloKai Visual Upgrade"
+  short_description: "Upgrade HoloKai branding and Vanguard visual experiences."
+  default_prompt: "Upgrade the HoloKai logo system and Vanguard visual experience using supplied brand and character art."

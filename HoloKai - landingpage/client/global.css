@@ -1,0 +1,61 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,600;1,700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 1%;
+    --foreground: 40 20% 95%;
+    --card: 0 0% 4%;
+    --card-foreground: 40 20% 95%;
+    --popover: 0 0% 4%;
+    --popover-foreground: 40 20% 95%;
+    --primary: 38 92% 50%;
+    --primary-foreground: 0 0% 2%;
+    --secondary: 0 0% 9%;
+    --secondary-foreground: 40 20% 95%;
+    --muted: 0 0% 9%;
+    --muted-foreground: 0 0% 58%;
+    --accent: 32 65% 16%;
+    --accent-foreground: 40 90% 87%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 13%;
+    --input: 0 0% 13%;
+    --ring: 38 92% 50%;
+    --radius: 0rem;
+  }
+
+  * { @apply border-border; }
+  html { scroll-behavior: smooth; }
+  body { @apply bg-background text-foreground; font-family: "Space Grotesk", sans-serif; }
+  button { font: inherit; }
+}
+
+@layer utilities {
+  .font-display { font-family: "Cormorant Garamond", Georgia, serif; }
+  .motif {
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 30l15-15v30L30 30zM30 30L15 45V15l15 15z' fill='%23f59e0b' fill-opacity='.028'/%3E%3C/svg%3E");
+  }
+  .film-grain {
+    opacity: .035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E");
+  }
+  .scanline::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(to bottom, transparent 0 5px, rgba(245,158,11,.045) 6px);
+  }
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .glass-panel {
+    @apply border border-white/10 bg-white/[0.03] backdrop-blur-md;
+  }
+  .text-glow-amber {
+    text-shadow: 0 0 24px rgba(245, 158, 11, 0.35);
+  }
+}

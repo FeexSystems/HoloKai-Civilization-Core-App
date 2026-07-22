@@ -5,6 +5,9 @@ pydantic>=2.0
 python-dotenv>=1.0.0
 openai>=1.0.0
 
+# Managed PostgreSQL (Phase 2 catalog + jobs + claim persistence)
+psycopg[binary]>=3.2.0
+
 # Official Ollama Python client (local host or https://ollama.com cloud)
 # https://github.com/ollama/ollama-python
 ollama>=0.6.0

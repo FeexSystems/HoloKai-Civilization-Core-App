@@ -9,12 +9,25 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from holokai_backend import CivilizationCore
+from grounding import build_grounded_answer, grounded_refusal_message
+from catalog_backend import (
+    ensure_storage_ready,
+    facets as library_facets,
+    get_source as library_get_source,
+    persist_grounded,
+    review_source as library_review_source,
+    search_sources as library_search_sources,
+    storage_status,
+)
+from job_manager import get_job as job_get, list_jobs as jobs_list, submit_job
+from model_gateway import synthesize_with_gateway
+from ris_pipeline import import_ris_file
 
 # ----------------------------------------------------------------------
 # Logging
@@ -30,8 +43,11 @@ logger = logging.getLogger("holokai.api")
 # ----------------------------------------------------------------------
 app = FastAPI(
     title="HoloKai Civilization Core API",
-    description="Multi-agent historical synthesis engine for African civilizations",
-    version="2.0.0",
+    description=(
+        "Multi-agent historical synthesis engine for African civilizations — "
+        "full knowledge graph, live memories, and Grok-class Alive replies"
+    ),
+    version="3.0.0",
 )
 
 # CORS – local Next.js + Vite; credentials off so wildcard-safe origins work
@@ -53,6 +69,16 @@ app.add_middleware(
 
 # Single shared core instance
 core = CivilizationCore()
+
+
+@app.on_event("startup")
+async def startup_storage_init():
+    try:
+        info = ensure_storage_ready()
+        logger.info("Storage init: %s", info)
+    except Exception as exc:
+        logger.warning("Storage init skipped: %s", exc)
+
 
 # In-memory chat history (last 100 messages)
 chat_history: List[Dict[str, Any]] = []
@@ -85,7 +111,7 @@ class RagRetrieveRequest(BaseModel):
 
 class RagAskRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
-    k: int = Field(5, ge=1, le=20)
+    k: int = Field(8, ge=1, le=20)
     min_score: float = Field(0.22, ge=0.0, le=1.0)
     domain: str | None = None
     model: str | None = Field(
@@ -95,6 +121,60 @@ class RagAskRequest(BaseModel):
     seed_if_empty: bool = Field(
         True, description="Auto-seed knowledge base when empty (Full RAG)"
     )
+    use_alive: bool = Field(
+        True, description="Use Alive Engine (graph + live memory + reply store)"
+    )
+    session_id: str | None = Field(None, description="Optional session id for live memory")
+
+
+class AliveAskRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    k: int = Field(8, ge=1, le=20)
+    min_score: float = Field(0.2, ge=0.0, le=1.0)
+    domain: str | None = None
+    model: str | None = None
+    synthesize: bool = True
+    use_web: bool = True
+    use_core: bool = True
+    session_id: str | None = None
+    learn: bool = True
+    fast: bool = Field(False, description="Skip web + core agents, reduce graph hops for faster response")
+
+
+class GroundedAskRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    k: int = Field(10, ge=1, le=30)
+    min_score: float = Field(0.2, ge=0.0, le=1.0)
+    domain: str | None = None
+    use_web: bool = True
+    use_core: bool = True
+    require_citations: bool = True
+    prefer_hosted: bool = True
+    hosted_model: str | None = None
+    ollama_model: str | None = None
+
+
+class StudioReviewRequest(BaseModel):
+    slug: str = Field(..., min_length=1)
+    decision: str = Field(..., min_length=1)
+    notes: str = ""
+
+
+class StudioImportRisRequest(BaseModel):
+    path: str = Field(..., min_length=1, description="Absolute or project-relative path to RIS file")
+    verify_doi: bool = False
+
+
+class GatewaySynthesisRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    contexts: list = Field(default_factory=list)
+    prefer_hosted: bool = True
+    hosted_model: str | None = None
+    ollama_model: str | None = None
+
+
+class JobRequest(BaseModel):
+    payload: Dict[str, Any] = Field(default_factory=dict)
 
 
 class QueryResponse(BaseModel):
@@ -108,6 +188,9 @@ class QueryResponse(BaseModel):
     safety_notes: list
     emotions: dict
     greeting_animation: str | None = None
+    grounded: dict = Field(default_factory=dict)
+    citation_validation: dict = Field(default_factory=dict)
+    canon_persist: dict = Field(default_factory=dict)
 
 
 class TTSRequest(BaseModel):
@@ -174,6 +257,112 @@ def add_to_history(role: str, content: str, **kwargs):
     return msg
 
 
+def attach_grounding(payload: Dict[str, Any], *, query: str, answer_key: str = "answer", contexts_key: str = "contexts") -> Dict[str, Any]:
+    answer = str(payload.get(answer_key) or "")
+    contexts = payload.get(contexts_key) or []
+    grounded = build_grounded_answer(query=query, answer=answer, contexts=contexts)
+    payload["grounded"] = grounded
+    payload["citation_validation"] = {
+        "claims": len(grounded.get("claims") or []),
+        "supported_claims": grounded.get("supported_claim_count", 0),
+        "citation_count": len(grounded.get("citation_index") or []),
+        "insufficient_evidence": grounded.get("insufficient_evidence", False),
+    }
+    return payload
+
+
+def execute_grounded_ask(payload: GroundedAskRequest) -> Dict[str, Any]:
+    from holokai_alive import alive_ask
+
+    retrieval = alive_ask(
+        payload.query,
+        k=payload.k,
+        min_score=payload.min_score,
+        domain=payload.domain,
+        synthesize=False,
+        kb=core.kb,
+        core=core if payload.use_core else None,
+        use_core=payload.use_core,
+        use_web=payload.use_web,
+        learn=False,
+    )
+
+    contexts = retrieval.get("contexts") or []
+    gateway_answer = None
+    gateway_meta: Dict[str, Any] = {}
+
+    if contexts:
+        try:
+            gw = synthesize_with_gateway(
+                query=payload.query,
+                contexts=contexts,
+                prefer_hosted=payload.prefer_hosted,
+                hosted_model=payload.hosted_model,
+                ollama_model=payload.ollama_model,
+            )
+            gateway_answer = gw.get("answer")
+            gateway_meta = {
+                "provider": gw.get("provider"),
+                "model": gw.get("model"),
+                "host": gw.get("host"),
+            }
+        except Exception as gateway_exc:
+            logger.warning("Gateway synthesis fallback: %s", gateway_exc)
+
+    if not gateway_answer:
+        fallback = alive_ask(
+            payload.query,
+            k=payload.k,
+            min_score=payload.min_score,
+            domain=payload.domain,
+            synthesize=True,
+            kb=core.kb,
+            core=core if payload.use_core else None,
+            use_core=payload.use_core,
+            use_web=payload.use_web,
+            learn=True,
+        )
+        gateway_answer = fallback.get("answer") or ""
+        if not contexts:
+            contexts = fallback.get("contexts") or []
+        gateway_meta = {
+            "provider": "alive_fallback",
+            "model": fallback.get("model"),
+            "host": fallback.get("chat_host"),
+        }
+
+    response: Dict[str, Any] = {
+        "ok": True,
+        "query": payload.query,
+        "answer": gateway_answer,
+        "contexts": contexts,
+        "retrieval_mode": retrieval.get("retrieval_mode") or "alive",
+        "gateway": gateway_meta,
+        "context_count": len(contexts),
+    }
+
+    attach_grounding(response, query=payload.query, answer_key="answer", contexts_key="contexts")
+
+    if payload.require_citations and response["grounded"].get("insufficient_evidence"):
+        response["ok"] = False
+        response["answer"] = grounded_refusal_message(payload.query)
+        response["refusal_reason"] = "insufficient_evidence"
+
+    response["canon_persist"] = persist_grounded(payload.query, response.get("grounded") or {})
+
+    if response.get("answer"):
+        add_to_history("user", payload.query)
+        add_to_history(
+            "assistant",
+            response.get("answer") or "",
+            active_agents=["HoloKai Grounded"],
+            fragments=response.get("contexts") or [],
+            grounded=response.get("grounded") or {},
+        )
+
+    return response
+
+
 # ----------------------------------------------------------------------
 # Endpoints
 # ----------------------------------------------------------------------
@@ -197,10 +386,19 @@ async def health():
     except Exception as exc:
         ollama_status = {"ok": False, "error": str(exc)}
 
+    alive_snap: Dict[str, Any] = {}
+    try:
+        from holokai_alive import alive_status
+
+        alive_snap = alive_status()
+    except Exception as exc:
+        alive_snap = {"error": str(exc)}
+
     return {
         "status": "ok",
         "service": "HoloKai Civilization Core",
-        "version": "2.2.0",
+        "version": "3.0.0",
+        "mode": "alive",
         "ollama": ollama_status,
         "supervisor": getattr(getattr(core, "supervisor", None), "active_backend", None),
         "vector_rag": {
@@ -215,6 +413,14 @@ async def health():
             if isinstance(rag.get("store"), dict)
             else None,
         },
+        "alive": {
+            "graph_nodes": (alive_snap.get("graph") or {}).get("nodes"),
+            "graph_edges": (alive_snap.get("graph") or {}).get("edges"),
+            "memory_total": ((alive_snap.get("memory") or {}).get("counts") or {}).get("total"),
+            "reply_store": (alive_snap.get("replies") or {}).get("count"),
+            "detail": alive_snap,
+        },
+        "storage": storage_status(),
     }
 
 
@@ -319,10 +525,242 @@ async def rag_ask(payload: RagAskRequest):
             model=payload.model,
             synthesize=payload.synthesize,
             kb=kb,
+            core=core if payload.use_alive else None,
+            use_alive=payload.use_alive,
+        )
+        # Persist to short chat history for continuity
+        if result.get("answer"):
+            add_to_history("user", payload.query)
+            add_to_history(
+                "assistant",
+                result.get("answer") or "",
+                active_agents=["HoloKai Alive"] if result.get("alive") else ["HoloKai RAG"],
+                fragments=result.get("contexts") or [],
+            )
+        grounded = attach_grounding(result, query=payload.query, answer_key="answer", contexts_key="contexts")
+        grounded["canon_persist"] = persist_grounded(payload.query, grounded.get("grounded") or {})
+        return grounded
+    except Exception as exc:
+        logger.exception("Full RAG ask failed")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/alive/ask")
+async def alive_ask_endpoint(payload: AliveAskRequest):
+    """Grok-class Alive ask: graph + live memory + vector + multi-agent + optional web."""
+    try:
+        from holokai_alive import alive_ask, ensure_alive_seeded
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    if core.kb is None or core.kb.count() == 0:
+        try:
+            ensure_alive_seeded(force=False)
+            from knowledge_base import KnowledgeBase
+
+            core.kb = KnowledgeBase()
+            for agent in core.agents.values():
+                if hasattr(agent, "kb"):
+                    agent.kb = core.kb
+        except Exception as exc:
+            logger.warning("Alive auto-seed: %s", exc)
+
+    try:
+        result = alive_ask(
+            payload.query,
+            k=payload.k,
+            min_score=payload.min_score,
+            domain=payload.domain,
+            model=payload.model,
+            synthesize=payload.synthesize,
+            kb=core.kb,
+            core=core if payload.use_core else None,
+            use_core=payload.use_core,
+            use_web=payload.use_web,
+            session_id=payload.session_id,
+            learn=payload.learn,
+            fast=payload.fast,
+        )
+        if result.get("answer"):
+            add_to_history("user", payload.query)
+            add_to_history(
+                "assistant",
+                result.get("answer") or "",
+                active_agents=["HoloKai Alive"],
+                fragments=result.get("contexts") or [],
+            )
+        grounded = attach_grounding(result, query=payload.query, answer_key="answer", contexts_key="contexts")
+        grounded["canon_persist"] = persist_grounded(payload.query, grounded.get("grounded") or {})
+        return grounded
+    except Exception as exc:
+        logger.exception("Alive ask failed")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/alive/status")
+async def alive_status_endpoint():
+    try:
+        from holokai_alive import alive_status
+
+        return alive_status()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/alive/seed")
+async def alive_seed_endpoint(force: bool = False):
+    """Seed full graph + live memories + vector active store."""
+    try:
+        from holokai_alive import ensure_alive_seeded
+
+        summary = ensure_alive_seeded(force=force)
+        try:
+            from knowledge_base import KnowledgeBase
+
+            kb = KnowledgeBase()
+            core.kb = kb
+            for agent in core.agents.values():
+                if hasattr(agent, "kb"):
+                    agent.kb = kb
+            core.rag_status = {
+                "enabled": True,
+                "ready": kb.count() > 0,
+                "store": kb.status(),
+                "seed": summary.get("vector"),
+            }
+        except Exception as exc:
+            logger.warning("Rebind KB after alive seed: %s", exc)
+        return {"ok": True, **summary}
+    except Exception as exc:
+        logger.exception("Alive seed failed")
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/graph/status")
+async def graph_status():
+    try:
+        from knowledge_graph import get_graph
+
+        return get_graph().status()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/graph/search")
+async def graph_search(payload: RagRetrieveRequest):
+    try:
+        from knowledge_graph import get_graph
+        from graph_seed import seed_knowledge_graph
+
+        g = get_graph()
+        if not g.nodes:
+            seed_knowledge_graph(force=False)
+            g = get_graph()
+        hits = g.search(
+            payload.query,
+            top_k=payload.k,
+            domain=payload.domain,
+            empire=payload.empire,
+        )
+        return {"query": payload.query, "count": len(hits), "nodes": hits}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/memory/status")
+async def memory_status():
+    try:
+        from memory_store import get_memory
+
+        return get_memory().status()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/memory/retrieve")
+async def memory_retrieve(payload: RagRetrieveRequest):
+    try:
+        from memory_store import get_memory
+
+        mem = get_memory()
+        packs = mem.retrieve(payload.query, k_episodic=payload.k, k_semantic=payload.k)
+        return {
+            "query": payload.query,
+            "packs": packs,
+            "context": mem.to_context_block(payload.query),
+            "counts": mem.counts(),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/memory/consolidate")
+async def memory_consolidate(
+    promote_to_graph: bool = True,
+    reindex_vector: bool = False,
+):
+    """
+    Full consolidation pass over the memory store.
+    Clusters episodic memories, promotes durable facts into knowledge graph, optionally re-indexes vector store.
+    """
+    try:
+        from memory_consolidator import consolidate_memories
+
+        result = consolidate_memories(
+            promote_to_graph=promote_to_graph,
+            reindex_vector=reindex_vector,
         )
         return result
     except Exception as exc:
-        logger.exception("Full RAG ask failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+class FusionRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    k: int = Field(12, ge=1, le=30)
+    min_score: float = Field(0.22, ge=0.0, le=1.0)
+    domain: str | None = None
+    graph_hops: int = Field(1, ge=0, le=3)
+    use_sparse: bool = True
+    use_memory: bool = True
+    use_reply: bool = True
+
+
+@app.post("/api/rag/fusion")
+async def rag_fusion(payload: FusionRequest):
+    """
+    Fusion retrieve: vector + graph hops + live memory + reply store, RRF-fused.
+    Returns per-channel stats and fused context list.
+    """
+    try:
+        from retrieve_fusion import fused_retrieve
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    if core.kb is None:
+        try:
+            from knowledge_base import KnowledgeBase
+            core.kb = KnowledgeBase()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Vector knowledge base not loaded ({exc}). POST /api/rag/seed first.",
+            ) from exc
+
+    try:
+        result = fused_retrieve(
+            payload.query,
+            kb=core.kb,
+            k=payload.k,
+            domain=payload.domain,
+            min_score=payload.min_score,
+            graph_hops=payload.graph_hops,
+            use_sparse=payload.use_sparse,
+            use_memory=payload.use_memory,
+            use_reply=payload.use_reply,
+        )
+        return result
+    except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
@@ -379,6 +817,173 @@ async def rag_retrieve(payload: RagRetrieveRequest):
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@app.post("/api/model/synthesize")
+async def model_synthesize_endpoint(payload: GatewaySynthesisRequest):
+    try:
+        return synthesize_with_gateway(
+            query=payload.query,
+            contexts=payload.contexts,
+            prefer_hosted=payload.prefer_hosted,
+            hosted_model=payload.hosted_model,
+            ollama_model=payload.ollama_model,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/grounded/ask")
+async def grounded_ask_endpoint(payload: GroundedAskRequest):
+    """
+    Synchronous grounded ask (kept for compatibility).
+    For production long-running synthesis, use POST /api/jobs/grounded-ask.
+    """
+    try:
+        return execute_grounded_ask(payload)
+    except Exception as exc:
+        logger.exception("Grounded ask failed")
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.post("/api/jobs/grounded-ask")
+async def grounded_ask_job_endpoint(payload: GroundedAskRequest):
+    def _runner(raw: Dict[str, Any]) -> Dict[str, Any]:
+        model = GroundedAskRequest(**raw)
+        return execute_grounded_ask(model)
+
+    return submit_job(job_type="grounded_synthesis", payload=payload.model_dump(), runner=_runner)
+
+
+@app.get("/api/jobs")
+async def jobs_list_endpoint(
+    job_type: str | None = None,
+    status: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    return jobs_list(job_type=job_type, status=status, limit=limit, offset=offset)
+
+
+@app.get("/api/jobs/{job_id}")
+async def job_status_endpoint(job_id: str):
+    row = job_get(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
+    return row
+
+
+@app.get("/api/storage/status")
+async def storage_status_endpoint():
+    return storage_status()
+
+
+@app.post("/api/storage/init")
+async def storage_init_endpoint(request: Request):
+    role = (request.headers.get("x-holokai-role") or "public-reader").strip().lower()
+    if role not in {"administrator"}:
+        raise HTTPException(status_code=403, detail="Administrator role required")
+    return ensure_storage_ready()
+
+
+@app.get("/api/library/facets")
+async def library_facets_endpoint():
+    return library_facets()
+
+
+@app.get("/api/library/search")
+async def library_search_endpoint(
+    q: str = Query("", description="Free text search"),
+    region: str | None = None,
+    era: str | None = None,
+    language: str | None = None,
+    evidence_type: str | None = None,
+    editorial_status: str | None = "reviewed",
+    peer_reviewed: bool | None = None,
+    limit: int = Query(25, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    return library_search_sources(
+        q=q,
+        region=region,
+        era=era,
+        language=language,
+        evidence_type=evidence_type,
+        editorial_status=editorial_status,
+        peer_reviewed=peer_reviewed,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@app.get("/api/library/{slug}")
+async def library_source_endpoint(slug: str):
+    row = library_get_source(slug)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Source not found: {slug}")
+    return row
+
+
+@app.get("/api/studio/queue")
+async def studio_queue_endpoint(limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
+    return library_search_sources(editorial_status=None, limit=limit, offset=offset)
+
+
+@app.post("/api/studio/review")
+async def studio_review_endpoint(payload: StudioReviewRequest, request: Request):
+    role = (request.headers.get("x-holokai-role") or "public-reader").strip().lower()
+    if role not in {"editor", "reviewer", "administrator"}:
+        raise HTTPException(status_code=403, detail="Editor, reviewer, or administrator role required")
+    try:
+        return library_review_source(payload.slug, payload.decision, reviewer_role=role, notes=payload.notes)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/studio/import-ris")
+async def studio_import_ris_endpoint(
+    payload: StudioImportRisRequest,
+    request: Request,
+    enqueue: bool = Query(True, description="Queue import in background job"),
+):
+    role = (request.headers.get("x-holokai-role") or "public-reader").strip().lower()
+    if role not in {"administrator", "editor"}:
+        raise HTTPException(status_code=403, detail="Administrator/editor role required")
+
+    def _runner(raw: Dict[str, Any]) -> Dict[str, Any]:
+        return import_ris_file(raw["path"], verify_doi=bool(raw.get("verify_doi")))
+
+    if enqueue:
+        return submit_job(
+            job_type="ris_import",
+            payload=payload.model_dump(),
+            runner=_runner,
+        )
+
+    try:
+        return import_ris_file(payload.path, verify_doi=payload.verify_doi)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/jobs/import-ris")
+async def import_ris_job_endpoint(payload: StudioImportRisRequest, request: Request):
+    role = (request.headers.get("x-holokai-role") or "public-reader").strip().lower()
+    if role not in {"administrator", "editor"}:
+        raise HTTPException(status_code=403, detail="Administrator/editor role required")
+
+    def _runner(raw: Dict[str, Any]) -> Dict[str, Any]:
+        return import_ris_file(raw["path"], verify_doi=bool(raw.get("verify_doi")))
+
+    return submit_job(
+        job_type="ris_import",
+        payload=payload.model_dump(),
+        runner=_runner,
+    )
+
+
 @app.post("/api/query", response_model=QueryResponse)
 async def process_query(payload: QueryRequest) -> Dict[str, Any]:
     query = payload.query.strip()
@@ -399,6 +1004,58 @@ async def process_query(payload: QueryRequest) -> Dict[str, Any]:
         # Add greeting animation to response
         result["greeting_animation"] = greeting_animation
 
+        # Enrich with graph + live memory fragments (non-destructive)
+        try:
+            from knowledge_graph import get_graph
+            from memory_store import get_memory
+
+            g_hits = get_graph().to_rag_contexts(query, top_k=3)
+            m_hits = get_memory().to_rag_contexts(query, top_k=2)
+            for h in g_hits + m_hits:
+                result.setdefault("fragments", []).append(
+                    {
+                        "content": h.get("content"),
+                        "confidence": float(h.get("score") or 0.7),
+                        "agent_origin": "Ancestral Graph"
+                        if h.get("retrieval", "").startswith("graph")
+                        else "Live Memory",
+                        "source_type": h.get("retrieval") or "memory",
+                        "citation": h.get("title"),
+                        "metadata": h.get("metadata") or {},
+                    }
+                )
+            # Learn from multi-agent summary
+            if result.get("summary"):
+                get_memory().learn_from_exchange(
+                    query,
+                    result["summary"],
+                    confidence=float(result.get("confidence") or 0.7),
+                    agents=result.get("active_agents") or [],
+                    mode="multi_agent",
+                )
+        except Exception as enrich_exc:
+            logger.warning("Query enrich/learn skipped: %s", enrich_exc)
+
+        # Build claim-level grounding for /api/query response using fragments as evidence contexts
+        frag_contexts = []
+        for f in result.get("fragments", []):
+            frag_contexts.append(
+                {
+                    "content": f.get("content") if isinstance(f, dict) else "",
+                    "title": (f.get("citation") if isinstance(f, dict) else None)
+                    or (f.get("metadata", {}).get("title") if isinstance(f, dict) else None)
+                    or "Knowledge Fragment",
+                    "score": (f.get("confidence") if isinstance(f, dict) else None),
+                    "retrieval": (f.get("source_type") if isinstance(f, dict) else None),
+                    "metadata": (f.get("metadata") if isinstance(f, dict) else {}) or {},
+                }
+            )
+        # attach_grounding reads contexts from a payload key; use a temporary key
+        result["__tmp__"] = frag_contexts
+        attach_grounding(result, query=query, answer_key="summary", contexts_key="__tmp__")
+        result.pop("__tmp__", None)
+        result["canon_persist"] = persist_grounded(query, result.get("grounded") or {})
+
         # Store assistant response
         add_to_history(
             "assistant",
@@ -407,6 +1064,7 @@ async def process_query(payload: QueryRequest) -> Dict[str, Any]:
             active_agents=result.get("active_agents", []),
             emotions=result.get("emotions", {}),
             greeting_animation=greeting_animation,
+            grounded=result.get("grounded") or {},
         )
 
         return result

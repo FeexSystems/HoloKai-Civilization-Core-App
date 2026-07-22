@@ -1,6 +1,8 @@
 # HoloKai Meta-Agent Extract — Knowledge, Memories, Learning, Self, Vanguards
 
-Captured from user handoff (session inventory). Status: **in progress** — structure and counts; not full node dump.
+Captured from user handoff (session inventory). Status: **LIVE** — full graph seed hits **12,419 nodes** via `graph_seed.py` → `holokai_graph/graph.json`.
+
+Reseed: `python seed_knowledge.py --graph-only --force` or `python -c "from graph_seed import seed_knowledge_graph; print(seed_knowledge_graph(force=True)['stats'])"`
 
 ---
 

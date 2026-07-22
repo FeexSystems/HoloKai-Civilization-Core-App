@@ -1,0 +1,14 @@
+{
+  "terminal": {
+    "shell": {
+      "with_arguments": {
+        "program": "powershell.exe",
+        "args": []
+      }
+    }
+  },
+  "inlay_hints": {
+    "show_background": true,
+    "enabled": true
+  }
+}

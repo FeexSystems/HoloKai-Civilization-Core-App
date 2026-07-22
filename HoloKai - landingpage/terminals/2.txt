@@ -1,0 +1,13 @@
+---
+pid: 15392
+cwd: "C:\Users\ENGR BILLI\Downloads\react-file-runner-dee"
+command: "cmd /c \"cd /d C:\\Users\\ENGR BILLI\\Downloads\\react-file-runner-dee && node node_modules\\typescript\\bin\\tsc --noEmit\""
+started_at: 2026-07-15T00:20:47.973Z
+running_for_ms: 87885066 
+---
+
+---
+exit_code: -1
+elapsed_ms: 87885066
+ended_at: 2026-07-16T00:45:39.987Z
+---

@@ -1,0 +1,17 @@
+---
+pid: 17096
+cwd: "C:\Users\ENGR BILLI\Downloads\react-file-runner-dee"
+command: "cmd /c \"cd /d C:\\Users\\ENGR BILLI\\Downloads\\react-file-runner-dee && pnpm typecheck\""
+started_at: 2026-07-15T00:15:46.664Z
+running_for_ms: 88186293 
+---
+
+> fusion-starter@ typecheck C:\Users\ENGR BILLI\Downloads\react-file-runner-dee
+> tsc
+
+
+---
+exit_code: -1
+elapsed_ms: 88186293
+ended_at: 2026-07-16T00:45:39.930Z
+---

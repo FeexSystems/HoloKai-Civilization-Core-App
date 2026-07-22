@@ -64,7 +64,20 @@ class JsonVectorCollection:
         self.path = Path(path)
         self.name = name
         self._records: List[Dict[str, Any]] = []
+        self._defer_save = False
+        self._dirty = False
         self._load()
+
+    def set_defer_save(self, defer: bool) -> None:
+        """When True, add() does not flush to disk until flush()."""
+        self._defer_save = bool(defer)
+        if not defer and self._dirty:
+            self._save()
+
+    def flush(self) -> None:
+        if self._dirty or True:
+            self._save()
+            self._dirty = False
 
     def _load(self) -> None:
         if not self.path.is_file():
@@ -84,7 +97,10 @@ class JsonVectorCollection:
             "collection": self.name,
             "records": self._records,
         }
-        self.path.write_text(json.dumps(payload), encoding="utf-8")
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload), encoding="utf-8")
+        tmp.replace(self.path)
+        self._dirty = False
 
     def add(
         self,
@@ -102,7 +118,9 @@ class JsonVectorCollection:
                     "metadata": metadatas[i] if i < len(metadatas) else {},
                 }
             )
-        self._save()
+        self._dirty = True
+        if not self._defer_save:
+            self._save()
 
     def count(self) -> int:
         return len(self._records)
@@ -644,18 +662,124 @@ def seed_classic_fragments(kb: KnowledgeBase) -> int:
     return kb.add_documents(documents)
 
 
+def _resolve_graph_vector_max(max_nodes: int | None = None) -> int | None:
+    """
+    How many graph nodes to embed.
+    None / 0 / 'all' / 'full' => entire inventory (no cap).
+    """
+    if max_nodes is not None:
+        return None if max_nodes <= 0 else max_nodes
+    raw = (os.getenv("HOLAKAI_GRAPH_VECTOR_MAX") or "0").strip().lower()
+    if raw in ("", "0", "all", "none", "full", "-1", "unlimited"):
+        return None
+    try:
+        n = int(raw)
+        return None if n <= 0 else n
+    except ValueError:
+        return None
+
+
+def seed_from_graph(kb: KnowledgeBase, max_nodes: int | None = None) -> int:
+    """Flatten knowledge graph nodes into the vector active reply store (full 12k by default)."""
+    try:
+        from graph_seed import seed_knowledge_graph
+        from knowledge_graph import get_graph
+    except ImportError as exc:
+        logger.warning("Graph modules unavailable: %s", exc)
+        return 0
+
+    try:
+        seed_knowledge_graph(force=False, dense=True, expand_facets=True)
+        g = get_graph()
+        if not g.nodes:
+            seed_knowledge_graph(force=True, dense=True, expand_facets=True)
+            g = get_graph()
+        cap = _resolve_graph_vector_max(max_nodes)
+        docs = g.export_documents_for_vector(max_nodes=cap, min_text_len=40)
+        if not docs:
+            return 0
+        # Batch add to avoid huge single encode spikes
+        batch = int(os.getenv("HOLAKAI_GRAPH_VECTOR_BATCH", "32"))
+        batch = max(1, min(batch, 128))
+        total = 0
+        n_docs = len(docs)
+        for i in range(0, n_docs, batch):
+            chunk = docs[i : i + batch]
+            total += kb.add_documents(chunk)
+            if i == 0 or (i // batch) % 10 == 0 or i + batch >= n_docs:
+                logger.info(
+                    "Graph→vector progress %s/%s (%.1f%%) · store=%s",
+                    min(i + batch, n_docs),
+                    n_docs,
+                    100.0 * min(i + batch, n_docs) / max(1, n_docs),
+                    kb.count(),
+                )
+        logger.info(
+            "Seeded %s graph docs into vector store (cap=%s · full_inventory=%s)",
+            total,
+            cap if cap is not None else "ALL",
+            cap is None,
+        )
+        return total
+    except Exception as exc:
+        logger.warning("seed_from_graph failed: %s", exc)
+        return 0
+
+
 def ensure_seeded(kb: KnowledgeBase, force: bool = False) -> Dict[str, Any]:
     """Seed if empty (or force re-seed). Returns summary counts."""
     if kb.count() > 0 and not force:
-        return {"skipped": True, "count": kb.count(), "reason": "already seeded"}
+        # Still ensure graph + memory exist even when vector already seeded
+        graph_info: Dict[str, Any] = {"skipped": True}
+        memory_info: Dict[str, Any] = {"skipped": True}
+        try:
+            from graph_seed import seed_knowledge_graph
+
+            graph_info = seed_knowledge_graph(force=False, dense=True)
+        except Exception as exc:
+            graph_info = {"error": str(exc)}
+        try:
+            from memory_store import get_memory
+
+            memory_info = get_memory().seed_bootstrap_memories(force=False)
+        except Exception as exc:
+            memory_info = {"error": str(exc)}
+        return {
+            "skipped": True,
+            "count": kb.count(),
+            "reason": "already seeded",
+            "graph": graph_info,
+            "memory": memory_info,
+        }
 
     if force and kb.count() > 0:
         kb.clear()
+
+    # Bootstrap live memory + full graph before vectors
+    graph_summary: Dict[str, Any] = {}
+    memory_summary: Dict[str, Any] = {}
+    try:
+        from graph_seed import seed_knowledge_graph
+
+        graph_summary = seed_knowledge_graph(force=force, dense=True, expand_facets=True)
+    except Exception as exc:
+        logger.warning("Graph seed during ensure_seeded: %s", exc)
+        graph_summary = {"error": str(exc)}
+    try:
+        from memory_store import get_memory
+
+        memory_summary = get_memory().seed_bootstrap_memories(force=force)
+    except Exception as exc:
+        logger.warning("Memory seed during ensure_seeded: %s", exc)
+        memory_summary = {"error": str(exc)}
 
     summary = {
         "classic": seed_classic_fragments(kb),
         "comprehensive": seed_from_comprehensive(kb),
         "knowledge_files": seed_from_knowledge_files(kb),
+        "knowledge_graph": seed_from_graph(kb),
+        "graph_store": graph_summary,
+        "memory_store": memory_summary,
         "total": kb.count(),
         "embeddings": kb.embedder.status(),
         "collection": kb.collection_name,

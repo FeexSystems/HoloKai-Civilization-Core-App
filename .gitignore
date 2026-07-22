@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 frontend/node_modules/
+holo-kai/node_modules/
+HoloKai - landingpage/node_modules/
 __pycache__/
 *.py[cod]
 *.pyo
@@ -21,11 +23,22 @@ holokai_chroma/
 .parquet
 groundsourse_2026.parquet
 
-# Next.js
+# Build artifacts
 frontend/.next/
 .next/
 out/
 frontend/out/
+holo-kai/dist/
+HoloKai - landingpage/dist/
+
+# Temp / runtime files
+*.ris
+response.json
+chat_response.json
+_t.tmp
+*.chroma/
+.parquet
+groundsourse_2026.parquet
 
 # OS / IDE
 .DS_Store

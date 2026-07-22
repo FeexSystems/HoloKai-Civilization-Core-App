@@ -1,0 +1,13 @@
+{
+  "name": "holokai-civilization-core",
+  "private": true,
+  "description": "HoloKai root scripts — active frontend is /holo-kai (frontend/ is retired)",
+  "scripts": {
+    "dev": "npm --prefix holo-kai run dev",
+    "dev:app": "npm --prefix holo-kai run dev",
+    "build": "npm --prefix holo-kai run build",
+    "preview": "npm --prefix holo-kai run preview",
+    "backend": "python main.py",
+    "dev:frontend-legacy": "npm --prefix frontend run dev"
+  }
+}

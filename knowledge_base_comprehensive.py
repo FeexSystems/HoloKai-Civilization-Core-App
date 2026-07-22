@@ -401,6 +401,132 @@ KNOWLEDGE_ENTRIES = [
         ),
         "metadata": {"domain": "ethics", "source": "HoloKai Knowledge Base", "title": "Ethical Engagement Protocols"},
     },
+
+    # =====================================================================
+    # ALIVE EXPANSION — additional high-signal nodes for denser retrieval
+    # =====================================================================
+    {
+        "text": (
+            "The Ghana Empire (Wagadu), flourishing roughly from the 6th to 13th centuries CE in "
+            "the western Sahel, controlled gold-salt trade corridors long before Mali. Its capital "
+            "zone near Koumbi Saleh organized taxation of caravans. Ghana's political model and "
+            "commercial geography prepared the ground for later Malian imperial expansion."
+        ),
+        "metadata": {"domain": "historian", "source": "HoloKai Knowledge Base", "title": "Ghana Empire (Wagadu)", "era": "Medieval", "region": "West Africa"},
+    },
+    {
+        "text": (
+            "Kanem-Bornu around Lake Chad sustained one of Africa's longest political traditions, "
+            "with Saifawa dynastic memory, trans-Saharan links, and Islamic scholarship. It "
+            "demonstrates Central Sahelian statecraft parallel to Niger Bend empires."
+        ),
+        "metadata": {"domain": "historian", "source": "HoloKai Knowledge Base", "title": "Kanem-Bornu", "era": "Medieval–Early Modern", "region": "Central Sahel"},
+    },
+    {
+        "text": (
+            "The Kingdom of Kongo developed sophisticated political theology, regalia, and "
+            "diplomacy with Portuguese arrivals from the late 15th century. Kongo Christianity "
+            "became a distinctive African Christian formation; later the Atlantic slave trade "
+            "violently restructured the region—HoloKai frames this without erasing Kongo agency."
+        ),
+        "metadata": {"domain": "historian", "source": "HoloKai Knowledge Base", "title": "Kingdom of Kongo", "era": "Early Modern", "region": "Central Africa"},
+    },
+    {
+        "text": (
+            "Great Lakes kingdoms including Buganda, Bunyoro, and Rwanda built complex kingship, "
+            "clan systems, and agricultural landscapes. Oral constitutional traditions and later "
+            "colonial interventions require careful multi-source reconstruction."
+        ),
+        "metadata": {"domain": "historian", "source": "HoloKai Knowledge Base", "title": "Great Lakes Kingdoms", "region": "East Africa"},
+    },
+    {
+        "text": (
+            "Mapungubwe (c. 11th–13th centuries) in the Limpopo valley preceded Great Zimbabwe as "
+            "a hierarchical center with gold working—including the famous golden rhinoceros—and "
+            "Indian Ocean trade links. It anchors southern African state formation narratives."
+        ),
+        "metadata": {"domain": "archaeology", "source": "HoloKai Knowledge Base", "title": "Mapungubwe", "era": "Medieval", "region": "Southern Africa"},
+    },
+    {
+        "text": (
+            "Lalibela's rock-hewn churches in Ethiopia express Zagwe-period sacred architecture "
+            "and pilgrimage geography. They continue Axumite Christian highland traditions in a "
+            "new monumental idiom carved from living rock."
+        ),
+        "metadata": {"domain": "archaeology", "source": "HoloKai Knowledge Base", "title": "Lalibela Churches", "region": "Horn of Africa"},
+    },
+    {
+        "text": (
+            "Timbuktu's Sankoré, Djinguereber, and Sidi Yahya institutions formed a university-like "
+            "ecosystem of teaching and manuscript production covering law, astronomy, mathematics, "
+            "and theology. West African scholarship was global, not peripheral."
+        ),
+        "metadata": {"domain": "historian", "source": "HoloKai Knowledge Base", "title": "Sankoré & Timbuktu Learning", "region": "West Africa"},
+    },
+    {
+        "text": (
+            "The periplus of the Erythraean Sea and later Arabic geographers document Horn and "
+            "East African ports in classical and medieval commerce. African ports were authors of "
+            "Indian Ocean history, not mere stops on Asian routes."
+        ),
+        "metadata": {"domain": "historian", "source": "HoloKai Knowledge Base", "title": "Indian Ocean African Ports", "region": "East Africa / Horn"},
+    },
+    {
+        "text": (
+            "Iron metallurgy in Africa includes early traditions such as those associated with "
+            "Nok and broader West African smelting, plus Meroitic iron industries. Technological "
+            "innovation was indigenous and diverse across ecological zones."
+        ),
+        "metadata": {"domain": "archaeology", "source": "HoloKai Knowledge Base", "title": "African Iron Innovations"},
+    },
+    {
+        "text": (
+            "Griots (jeliw) in Mande societies are professional historians, musicians, and "
+            "diplomats who conserve genealogies and epics such as Sundiata. Oral performance is "
+            "an archive technology with rigor and ethics of its own."
+        ),
+        "metadata": {"domain": "anthropology", "source": "HoloKai Knowledge Base", "title": "Griot Historical Memory", "region": "West Africa"},
+    },
+    {
+        "text": (
+            "Queen mothers and female titleholders in Asante, Buganda, and other polities "
+            "exercised real political power. Gendered African political history must include "
+            "these offices rather than projecting European patriarchy as universal."
+        ),
+        "metadata": {"domain": "anthropology", "source": "HoloKai Knowledge Base", "title": "Queen Mothers & Female Power"},
+    },
+    {
+        "text": (
+            "Restitution of Benin Bronzes and other looted works is an ethical and legal "
+            "frontier of the 21st century. Returns to Nigeria and partnerships with European "
+            "museums rewrite colonial collecting narratives; HoloKai treats this as living heritage politics."
+        ),
+        "metadata": {"domain": "ethics", "source": "HoloKai Knowledge Base", "title": "Restitution Politics — Benin and Beyond"},
+    },
+    {
+        "text": (
+            "Afrofuturism retools ancestral archives—Adinkra, Dogon cosmology, Kemet aesthetics, "
+            "and diaspora memory—into speculative design and technology ethics. HoloKai Vanguards "
+            "operate at this Sankofa interface of past and future."
+        ),
+        "metadata": {"domain": "anthropology", "source": "HoloKai Knowledge Base", "title": "Afrofuturism & Ancestral Futures"},
+    },
+    {
+        "text": (
+            "Carthaginian agricultural manuals (including traditions linked to Mago) and Maghreb "
+            "agronomy show North Africa as a scientific and economic powerhouse of the "
+            "Mediterranean, entangled with Numidian and Saharan worlds."
+        ),
+        "metadata": {"domain": "historian", "source": "HoloKai Knowledge Base", "title": "North African Agrarian Science", "region": "North Africa"},
+    },
+    {
+        "text": (
+            "The Sahara was a bridge, not a barrier: rock art provinces, pastoral corridors, "
+            "Garamantian systems, and later caravan empires linked forest, Sahel, and Maghreb. "
+            "Civilizations of Africa are continental networks."
+        ),
+        "metadata": {"domain": "historian", "source": "HoloKai Knowledge Base", "title": "Sahara as Bridge"},
+    },
 ]
 
 

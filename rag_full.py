@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -73,18 +74,50 @@ def full_rag_ask(
     model: str | None = None,
     synthesize: bool = True,
     kb: Any = None,
+    core: Any = None,
+    use_alive: bool | None = None,
 ) -> Dict[str, Any]:
     """
     Full RAG ask with ollama.Client cloud fallback for chat.
 
-    Returns:
-      {
-        query, contexts, answer?, retrieval_mode, embeddings, chat_host?, model?,
-        vector_count, ok
-      }
+    When HOLAKAI_ALIVE=1 (default), routes through the Alive Engine:
+    vector + knowledge graph + live memories + reply store + optional live web.
     """
     from embeddings_ollama import check_embeddings
     from ollama_client import synthesize_rag_answer, status as ollama_status
+
+    if use_alive is None:
+        use_alive = os.getenv("HOLAKAI_ALIVE", "1").strip().lower() not in (
+            "0",
+            "false",
+            "no",
+            "off",
+        )
+
+    if use_alive:
+        try:
+            from holokai_alive import alive_ask
+
+            result = alive_ask(
+                query,
+                k=max(k, 8),
+                min_score=min_score,
+                domain=domain,
+                model=model,
+                synthesize=synthesize,
+                kb=kb,
+                core=core,
+                use_core=core is not None,
+                use_web=True,
+                learn=True,
+            )
+            emb_status = check_embeddings()
+            result["embeddings"] = emb_status
+            result["ollama"] = ollama_status()
+            result["alive"] = True
+            return result
+        except Exception as exc:
+            logger.warning("Alive engine failed, falling back to classic RAG: %s", exc)
 
     emb_status = check_embeddings()
     contexts: List[Dict[str, Any]] = []
@@ -124,6 +157,25 @@ def full_rag_ask(
         logger.warning("Vector retrieve failed: %s", exc)
         retrieval_mode = "vector_error"
 
+    # Graph + memory soft merge
+    try:
+        from knowledge_graph import get_graph
+
+        g = get_graph()
+        if g.nodes:
+            for c in g.to_rag_contexts(query, top_k=max(3, k // 2)):
+                contexts.append(c)
+            retrieval_mode = "hybrid_graph" if retrieval_mode == "vector" else "graph"
+    except Exception:
+        pass
+    try:
+        from memory_store import get_memory
+
+        for c in get_memory().to_rag_contexts(query, top_k=3):
+            contexts.append(c)
+    except Exception:
+        pass
+
     # Keyword fallback for Full RAG when vectors missing/weak
     if len(contexts) < max(1, k // 2):
         extra = _keyword_retrieve_from_comprehensive(query, top_k=k)
@@ -135,10 +187,19 @@ def full_rag_ask(
                 contexts.append(e)
                 seen.add(e["content"])
             retrieval_mode = (
-                "hybrid" if retrieval_mode == "vector" else "keyword"
+                "hybrid" if "vector" in retrieval_mode or retrieval_mode == "vector" else "keyword"
             )
 
-    contexts = contexts[:k]
+    # Dedupe + cap
+    deduped: List[Dict[str, Any]] = []
+    seen_t = set()
+    for c in contexts:
+        key = (c.get("content") or "")[:140]
+        if key in seen_t:
+            continue
+        seen_t.add(key)
+        deduped.append(c)
+    contexts = deduped[: max(k, 8)]
     result: Dict[str, Any] = {
         "ok": True,
         "query": query,
@@ -148,6 +209,7 @@ def full_rag_ask(
         "embeddings": emb_status,
         "ollama": ollama_status(),
         "kb_error": kb_error,
+        "alive": False,
     }
 
     if not synthesize:
@@ -157,6 +219,20 @@ def full_rag_ask(
         synth = synthesize_rag_answer(query, contexts, model=model)
         result.update(synth)
         result["ok"] = True
+        # Learn from classic path too
+        if result.get("answer"):
+            try:
+                from memory_store import get_memory
+                from reply_store import get_reply_store
+
+                get_memory().learn_from_exchange(
+                    query, result["answer"], confidence=0.7, mode="classic_rag"
+                )
+                get_reply_store().put(
+                    query, result["answer"], confidence=0.7, mode="classic_rag"
+                )
+            except Exception:
+                pass
     except Exception as exc:
         logger.warning("RAG synthesize failed: %s", exc)
         # Still return contexts — partial Full RAG
