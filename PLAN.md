@@ -71,12 +71,12 @@ Plan based on the uploaded state and a fresh review of the codebase.
   - Remove the gradient overlay `bg-gradient-to-t from-[#020202] via-[#020202]/50 to-transparent`.
   - Add `mix-blend-mode: screen` to the unit image (`style={{ mixBlendMode: 'screen' }}` or Tailwind `mix-blend-screen`).
 
-### 2.2 Remove RETURN button from UnitLabViewer
+### 2.2 Add a navigation button to route pages from UnitLabViewer
 - **File:** `HoloKai - landingpage/client/components/lab/UnitLabViewer.tsx`
-- **Change:** Remove the `onReturnToLanding` prop and the RETURN button block (lines ~276-286).
-- **Also:** Remove the `ArrowLeft` import from `lucide-react`.
+- **Change:** Do **not** remove the RETURN button. Instead, add a new navigation button that routes to another key page (e.g., the Civilization Core, Library, or a unit-selection page).
+- **Also:** Add the needed routing icon to the `lucide-react` import if it is not already present.
 - **File:** `HoloKai - landingpage/client/pages/Index.tsx`
-- **Change:** Remove the `onReturnToLanding` prop from the `<UnitLabViewer>` call.
+- **Change:** Keep `onReturnToLanding` for the RETURN button. Pass the new navigation callback (e.g., `onNavigateToCore`) to `UnitLabViewer` if it needs to route to the Civilization Core.
 
 ### 2.3 Clearer access points to Civilization Core / Library / Spline robot
 - **File:** `HoloKai - landingpage/client/pages/Index.tsx`
