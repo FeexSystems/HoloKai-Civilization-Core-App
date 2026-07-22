@@ -17,6 +17,9 @@ export default defineConfig({
     react(),
   ],
   server: {
+    host: '0.0.0.0',
+    port: 5000,
+    allowedHosts: true,
     // Proxy Python FastAPI Civilization Core during local dev
     // (when VITE_API_BASE_URL is empty / same-origin)
     proxy: {
