@@ -71,23 +71,23 @@ Plan based on the uploaded state and a fresh review of the codebase.
   - Remove the gradient overlay `bg-gradient-to-t from-[#020202] via-[#020202]/50 to-transparent`.
   - Add `mix-blend-mode: screen` to the unit image (`style={{ mixBlendMode: 'screen' }}` or Tailwind `mix-blend-screen`).
 
-### 2.2 Add a navigation button to route pages from UnitLabViewer
+### 2.2 Add bidirectional page navigation in UnitLabViewer
 - **File:** `HoloKai - landingpage/client/components/lab/UnitLabViewer.tsx`
-- **Change:** Do **not** remove the RETURN button. Instead, add a new navigation button that routes to another key page (e.g., the Civilization Core, Library, or a unit-selection page).
+- **Change:** Do **not** remove the RETURN button. Add a new navigation button that routes to the Civilization Core (e.g., label it **“ENTER ALKEBULAN”**).
 - **Also:** Add the needed routing icon to the `lucide-react` import if it is not already present.
 - **File:** `HoloKai - landingpage/client/pages/Index.tsx`
-- **Change:** Keep `onReturnToLanding` for the RETURN button. Pass the new navigation callback (e.g., `onNavigateToCore`) to `UnitLabViewer` if it needs to route to the Civilization Core.
+- **Change:** Keep `onReturnToLanding` for the RETURN button. Pass a new callback (e.g., `onEnterAlkebulan`) to `UnitLabViewer` that navigates to the core URL (`VITE_CORE_URL`).
 
-### 2.3 Clearer access points to Civilization Core / Library / Spline robot
+### 2.3 Bidirectional navigation between Orbital Lab and Civilization Core
 - **File:** `HoloKai - landingpage/client/pages/Index.tsx`
 - **Change:**
-  - Replace the hardcoded `http://localhost:5173` URLs with an environment-aware URL.
+  - Replace the hardcoded `http://localhost:5173` URLs with an environment-aware URL (`VITE_CORE_URL`).
   - Add `VITE_CORE_URL` to the landing page env (e.g., `http://localhost:5000` for local dev, Replit dev URL on Replit).
   - In `holo-kai/vite.config.js`, the `/api` proxy stays pointed at `http://localhost:8000`; the landing page only needs to link to the `holo-kai` root.
-  - Add at least one more obvious CTA:
-    - Header: keep `ENTER ALKEBULAN` and add a `CIVILIZATION CORE` text link.
-    - Hero: add an `OPEN LIBRARY` or `MEET THE ROBOT` secondary button.
-    - Vanguard section: add an `ACCESS CORE` strip at the bottom.
+  - Keep the existing `ENTER ALKEBULAN` buttons in the header and hero.
+  - Add an `ENTER ALKEBULAN` / `ACCESS CIVILIZATION CORE` button in the Vanguard section and in the UnitLabViewer footer.
+- **File:** `holo-kai/src/components/core/Sidebar.jsx`
+- **Change:** Update the footer link text from `Return to Orbital Lab` to **`RETURN TO ALKEBULAN`** and make sure it routes to the landing page (`VITE_LANDING_URL` or a configured URL). Optionally add a matching button in the Civilization Core top bar.
 
 ## Phase 3 — Environment & workflow
 
