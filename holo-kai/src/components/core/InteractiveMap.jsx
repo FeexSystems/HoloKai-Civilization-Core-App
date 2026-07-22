@@ -29,18 +29,19 @@ export default function InteractiveMap() {
       const region = activeLayer !== 'all' ? activeLayer : undefined;
       const data = await searchLibrary({ region, limit: 100 });
       if (data?.items?.length) {
-        const mapped = data.items
-          .filter((s) => s.lat != null && s.lng != null)
-          .map((s, i) => ({
+        const mapped = data.items.map((s, i) => {
+          const regionCoords = MOCK_MAP_LOCATIONS.find((m) => m.region === s.region);
+          return {
             id: `api-${s.slug || i}`,
             name: s.title,
-            lat: s.lat,
-            lng: s.lng,
+            lat: s.lat ?? regionCoords?.lat ?? null,
+            lng: s.lng ?? regionCoords?.lng ?? null,
             civilization: s.civilization || '',
             era: s.era || 'Unknown',
             description: s.summary || '',
             region: s.region || '',
-          }));
+          };
+        }).filter((s) => s.lat != null && s.lng != null);
         setApiLocations(mapped.length > 0 ? mapped : null);
       } else {
         setApiLocations(null);

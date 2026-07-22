@@ -60,6 +60,10 @@ export default function TimelineExplorer() {
       if (!eraDef) return true;
       if (eraDef.id === 'ancient') return yearNum < -1000;
       if (eraDef.id === 'classical') return yearNum >= -1000 && yearNum < 500;
+      if (eraDef.id === 'medieval-early') return yearNum >= 500 && yearNum < 1000;
+      if (eraDef.id === 'medieval-late') return yearNum >= 1000 && yearNum < 1500;
+      if (eraDef.id === 'early-modern') return yearNum >= 1500 && yearNum < 1800;
+      if (eraDef.id === 'modern') return yearNum >= 1800;
       return true;
     });
   }, [apiEvents, eraFilter]);

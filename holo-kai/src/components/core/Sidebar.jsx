@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   MessageSquare, Library, Clock, Map, GitBranch, ScrollText,
-  Scale, Volume2, ChevronLeft, Shield, ShieldCheck, PenTool,
+  Scale, Volume2, ChevronLeft, ShieldCheck, PenTool,
 } from 'lucide-react';
 import { useHoloKai } from '@/lib/HoloKaiContext';
 import { GUARDIANS } from '@/lib/guardians';

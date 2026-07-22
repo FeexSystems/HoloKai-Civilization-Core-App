@@ -256,6 +256,20 @@ export default function Index() {
               >
                 ENTER ALKEBULAN
               </button>
+              <button
+                type="button"
+                onClick={() => { window.location.href = "http://localhost:5173/core"; }}
+                className="border border-white/20 px-8 py-4 text-xs tracking-[0.2em] text-white transition hover:bg-white/5"
+              >
+                CIVILIZATION CORE
+              </button>
+              <button
+                type="button"
+                onClick={() => { window.location.href = "http://localhost:5173/orbital-lab"; }}
+                className="border border-white/20 px-8 py-4 text-xs tracking-[0.2em] text-white transition hover:bg-white/5"
+              >
+                SPLINE LAB
+              </button>
             </div>
             <div className="mt-10 flex flex-wrap gap-6 border-t border-white/10 pt-6">
               {[
@@ -326,15 +340,14 @@ export default function Index() {
               key={unit.id}
               type="button"
               onClick={() => openUnit(unit)}
-              className="group relative h-[530px] w-[82vw] flex-none overflow-hidden border border-amber-900/40 bg-zinc-950 text-left sm:w-[440px]"
+              className="group relative h-[530px] w-[82vw] flex-none overflow-hidden border border-amber-900/40 text-left sm:w-[440px]"
             >
               <img
                 src={unit.fullbodyImage}
                 alt={unit.name}
-                className="absolute inset-0 h-full w-full object-cover object-top opacity-50 grayscale transition duration-700 group-hover:scale-105 group-hover:opacity-90 group-hover:grayscale-0"
+                className="absolute inset-0 h-full w-full object-cover object-top opacity-50 grayscale transition duration-700 group-hover:scale-105 group-hover:opacity-90 group-hover:grayscale-0 mix-blend-screen"
                 loading="lazy"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#020202] via-[#020202]/50 to-transparent" />
               <div className="relative flex h-full flex-col justify-between p-7">
                 <div className="flex items-start justify-between">
                   <span className="font-display text-5xl font-bold text-amber-500/65">

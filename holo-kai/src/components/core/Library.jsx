@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Search, FileText, BookOpen, Scroll, Volume2, Loader2 } from 'lucide-react';
 import { useHoloKai } from '@/lib/HoloKaiContext';
 import { searchLibrary, libraryFacets } from '@/lib/holokaiApi';
@@ -23,6 +23,8 @@ export default function Library({ onSelectSource }) {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
 
+  const debounceRef = useRef(null);
+
   const loadFromApi = useCallback(async () => {
     setLoading(true);
     setApiError('');
@@ -30,6 +32,8 @@ export default function Library({ onSelectSource }) {
       const [searchData, facetData] = await Promise.all([
         searchLibrary({
           q: search || undefined,
+          civilization: filters.civilization || undefined,
+          type: filters.type || undefined,
           era: filters.era || undefined,
           region: filters.region || undefined,
           limit: 50,
@@ -44,10 +48,12 @@ export default function Library({ onSelectSource }) {
     } finally {
       setLoading(false);
     }
-  }, [search, filters.era, filters.region]);
+  }, [search, filters]);
 
   useEffect(() => {
-    loadFromApi();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(loadFromApi, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [loadFromApi]);
 
   const sources = useMemo(() => {

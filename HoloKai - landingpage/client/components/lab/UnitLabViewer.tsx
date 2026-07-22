@@ -11,7 +11,6 @@ import {
   VolumeX,
   X,
   Home,
-  ArrowLeft,
 } from "lucide-react";
 import { HoloKaiLogo } from "@/components/HoloKaiLogo";
 import type { Unit } from "@/data/units";
@@ -273,17 +272,7 @@ export const UnitLabViewer = forwardRef<HTMLDivElement, UnitLabViewerProps>(
                 </button>
               </>
             )}
-            {onReturnToLanding && (
-              <button
-                type="button"
-                onClick={onReturnToLanding}
-                className="border border-white/15 bg-black/55 px-4 py-2.5 text-[10px] font-bold tracking-[0.18em] text-zinc-300 backdrop-blur-xl transition hover:border-zinc-400/40 hover:text-white"
-                aria-label="Return to landing page"
-              >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                RETURN
-              </button>
-            )}
+
             <button
               type="button"
               onClick={onClose}
