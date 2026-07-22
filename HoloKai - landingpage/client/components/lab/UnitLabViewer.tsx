@@ -12,6 +12,7 @@ import {
   X,
   Home,
   ArrowLeft,
+  Zap,
 } from "lucide-react";
 import { HoloKaiLogo } from "@/components/HoloKaiLogo";
 import type { Unit } from "@/data/units";
@@ -34,6 +35,8 @@ type UnitLabViewerProps = {
   onChangeUnit?: (unit: Unit) => void;
   /** Optional callback to return to landing page */
   onReturnToLanding?: () => void;
+  /** Optional callback to navigate to Civilization Core */
+  onEnterAlkebulan?: () => void;
 };
 
 function CanvasFallback({ accent }: { accent: string }) {
@@ -54,7 +57,7 @@ function CanvasFallback({ accent }: { accent: string }) {
 }
 
 export const UnitLabViewer = forwardRef<HTMLDivElement, UnitLabViewerProps>(
-  function UnitLabViewer({ unit, onClose, onChangeUnit, onReturnToLanding }, ref) {
+  function UnitLabViewer({ unit, onClose, onChangeUnit, onReturnToLanding, onEnterAlkebulan }, ref) {
     const [autoRotate, setAutoRotate] = useState(true);
     const [panelOpen, setPanelOpen] = useState(true);
     const [muted, setMuted] = useState(true);
@@ -277,17 +280,28 @@ export const UnitLabViewer = forwardRef<HTMLDivElement, UnitLabViewerProps>(
               <button
                 type="button"
                 onClick={onReturnToLanding}
-                className="border border-white/15 bg-black/55 px-4 py-2.5 text-[10px] font-bold tracking-[0.18em] text-zinc-300 backdrop-blur-xl transition hover:border-zinc-400/40 hover:text-white"
+                className="flex items-center gap-1.5 border border-white/15 bg-black/55 px-4 py-2.5 text-[10px] font-bold tracking-[0.18em] text-zinc-300 backdrop-blur-xl transition hover:border-zinc-400/40 hover:text-white"
                 aria-label="Return to landing page"
               >
-                <ArrowLeft className="h-4 w-4 mr-1" />
+                <ArrowLeft className="h-3.5 w-3.5" />
                 RETURN
+              </button>
+            )}
+            {onEnterAlkebulan && (
+              <button
+                type="button"
+                onClick={onEnterAlkebulan}
+                className="flex items-center gap-1.5 border border-amber-500/40 bg-amber-500/10 px-5 py-2.5 text-[10px] font-bold tracking-[0.2em] text-amber-200 backdrop-blur-xl transition hover:bg-amber-500 hover:text-black"
+                aria-label="Enter Alkebulan — Civilization Core"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                ENTER ALKEBULAN
               </button>
             )}
             <button
               type="button"
               onClick={onClose}
-              className="border border-amber-500/40 bg-amber-500/10 px-5 py-2.5 text-[10px] font-bold tracking-[0.2em] text-amber-200 backdrop-blur-xl transition hover:bg-amber-500 hover:text-black"
+              className="border border-white/15 bg-black/55 px-4 py-2.5 text-[10px] font-bold tracking-[0.18em] text-zinc-300 backdrop-blur-xl transition hover:border-zinc-400/40 hover:text-white"
             >
               EXIT LAB
             </button>

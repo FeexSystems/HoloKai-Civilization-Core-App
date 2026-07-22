@@ -13,7 +13,7 @@ import VanguardPanel from '@/components/core/VanguardPanel';
 import SourceDrawer from '@/components/core/SourceDrawer';
 import StudioEditor from '@/components/core/StudioEditor';
 import LogUpdateDialog from '@/components/core/LogUpdateDialog';
-import { GitPullRequest } from 'lucide-react';
+import { GitPullRequest, ChevronLeft } from 'lucide-react';
 import { useHoloKai } from '@/lib/HoloKaiContext';
 import { DEFAULT_GUARDIAN } from '@/lib/guardians';
 
@@ -93,6 +93,14 @@ export default function CivilizationCore() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <a
+              href={import.meta.env.VITE_LANDING_URL || '/'}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-mono tracking-[0.1em] uppercase transition-all hover:scale-[1.03] text-white/40 hover:text-white/70"
+              style={{ border: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <ChevronLeft className="w-3 h-3" />
+              Return to Alkebulan
+            </a>
             <button
               onClick={() => setShowLogUpdate(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-mono tracking-[0.1em] uppercase transition-all hover:scale-[1.03]"
@@ -120,7 +128,7 @@ export default function CivilizationCore() {
         </div>
       </main>
 
-      <VanguardPanel onOpenCitation={handleOpenCitation} />
+      {view !== 'vanguard' && <VanguardPanel onOpenCitation={handleOpenCitation} />}
       <SourceDrawer open={!!sourceDrawerCitation} onClose={handleCloseCitation} citation={sourceDrawerCitation} />
       <DockedGuardian aiState={aiState} />
 

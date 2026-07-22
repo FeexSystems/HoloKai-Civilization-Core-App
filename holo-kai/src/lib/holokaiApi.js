@@ -330,6 +330,8 @@ export async function searchLibrary(options = {}) {
     q: options.q || '',
     region: options.region || '',
     era: options.era || '',
+    civilization: options.civilization || '',
+    type: options.type || '',
     language: options.language || '',
     evidence_type: options.evidenceType || '',
     editorial_status: options.editorialStatus ?? 'reviewed',

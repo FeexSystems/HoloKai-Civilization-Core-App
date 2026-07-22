@@ -3,6 +3,7 @@ import { Search, FileText, BookOpen, Scroll, Volume2, Loader2 } from 'lucide-rea
 import { useHoloKai } from '@/lib/HoloKaiContext';
 import { searchLibrary, libraryFacets } from '@/lib/holokaiApi';
 import { MOCK_SOURCES, CIVILIZATIONS } from '@/lib/mockData';
+import { useDebounce } from '@/lib/useDebounce';
 
 const TYPE_ICONS = {
   Manuscript: FileText,
@@ -23,15 +24,19 @@ export default function Library({ onSelectSource }) {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
 
+  const debouncedSearch = useDebounce(search, 300);
+
   const loadFromApi = useCallback(async () => {
     setLoading(true);
     setApiError('');
     try {
       const [searchData, facetData] = await Promise.all([
         searchLibrary({
-          q: search || undefined,
+          q: debouncedSearch || undefined,
           era: filters.era || undefined,
           region: filters.region || undefined,
+          civilization: filters.civilization || undefined,
+          type: filters.type || undefined,
           limit: 50,
         }),
         libraryFacets(),
@@ -44,7 +49,7 @@ export default function Library({ onSelectSource }) {
     } finally {
       setLoading(false);
     }
-  }, [search, filters.era, filters.region]);
+  }, [debouncedSearch, filters.era, filters.region, filters.civilization, filters.type]);
 
   useEffect(() => {
     loadFromApi();

@@ -1,37 +1,71 @@
 # HoloKai Civilization Core
 
-A multi-agent AI system for preserving and explaining African civilizations, cultures, sciences, and philosophies through an interactive interface.
+A multi-agent AI system for preserving and explaining African civilizations through an interactive interface. Three services must all be running.
 
 ## How to run
 
-Two workflows must both be running:
+| Workflow | Command | Port | Role |
+|---|---|---|---|
+| **Backend (FastAPI)** | `python main.py` | 8000 | AI agents, RAG, library API |
+| **Frontend (Vite)** | `pnpm -C holo-kai run dev` | 5000 | Civilization Core (main UI) |
+| **Landing Page (Vite)** | `pnpm --filter fusion-starter run dev` | 8080 | Orbital Lab entry point |
 
-| Workflow | Command | Port |
-|---|---|---|
-| **Backend (FastAPI)** | `python main.py` | 8000 |
-| **Frontend (Vite)** | `npm --prefix holo-kai run dev` | 5000 |
+**Preview pane:** switch to port 8080 for the Orbital Lab landing page, or port 5000 for the Civilization Core directly.
 
-The preview pane connects to the frontend on **port 5000**. The frontend proxies `/api/*` requests to the backend on port 8000.
+## Navigation flow
+
+```
+Orbital Lab (port 8080)
+  → ENTER ALKEBULAN  →  Civilization Core (port 5000)
+  ← RETURN TO ALKEBULAN ←
+```
+
+- Landing page header + hero: **ENTER ALKEBULAN** button → port 5000
+- Vanguard section: **ENTER ALKEBULAN — CIVILIZATION CORE** strip → port 5000  
+- 3D Unit Lab viewer footer: **ENTER ALKEBULAN** button → port 5000
+- Civilization Core sidebar footer: **Return to Alkebulan** → port 8080
+- Civilization Core top bar: **Return to Alkebulan** → port 8080
 
 ## Required secrets
 
 | Key | Purpose |
 |---|---|
-| `OPENAI_API_KEY` | Powers the AI agents (also accepts xAI/Grok-compatible endpoints) |
+| `OPENAI_API_KEY` | Powers the AI agents (OpenAI / xAI/Grok compatible) |
+
+## Environment variables (non-secret)
+
+| Key | Default | Purpose |
+|---|---|---|
+| `VITE_CORE_URL` | `http://localhost:5000` | Landing page → Core navigation URL |
+| `VITE_LANDING_URL` | `http://localhost:8080` | Core → Landing page navigation URL |
+
+## Package management
+
+This is a **pnpm workspace** (root `pnpm-workspace.yaml`). Both frontends are managed together:
+
+```bash
+pnpm install              # install all packages
+pnpm run dev              # start holo-kai (Core)
+pnpm run dev:landingpage  # start landing page
+pnpm run build            # build holo-kai
+pnpm run build:landingpage
+```
 
 ## Architecture
 
-- **Backend** (`main.py` + `holokai_backend.py`): FastAPI app with 5 specialist agents — Historian, Archaeologist, Anthropologist, Linguist, Ethicist — orchestrated by a rule-based + LLM supervisor.
-- **Frontend** (`holo-kai/`): React + Vite app with Spline 3D, Tailwind CSS, shadcn/ui components.
-- **Knowledge base** (`knowledge_base_comprehensive.py`): 4,858 curated chunks covering African civilizations across 5 eras.
-- **Vector store**: Falls back to pure-Python JSON cosine store (no Ollama/Chroma/Qdrant needed on Replit).
+- **Backend** (`main.py` + `holokai_backend.py`): FastAPI with 5 specialist AI agents — Historian, Archaeologist, Anthropologist, Linguist, Ethicist.
+- **Core frontend** (`holo-kai/`): React + Vite + Tailwind. Pages: Research Chat, Library, Timeline, Map, Manuscripts, Knowledge Graph, Compare, Oral Tradition, Vanguard, Studio.
+- **Landing page** (`HoloKai - landingpage/`): React + Vite + Express + Three.js. Orbital Lab with 3D unit viewer and Vanguard showcase.
+- **Knowledge base** (`knowledge_base_comprehensive.py`): 4,858 curated chunks across 5 eras.
+- **Vector store**: Falls back to pure-Python JSON cosine store (no Ollama/Chroma needed).
 
-## Optional services (not available on Replit)
+## Known limitations on Replit
 
-- **Ollama** local embeddings (`nomic-embed-text`) — falls back to hashing embeddings automatically.
-- **Chroma / Qdrant** vector DBs — falls back to JSON store automatically.
-- **PostgreSQL** — the catalog backend gracefully degrades without it.
+- Ollama (local embeddings) is unavailable → hashing embeddings used as fallback.
+- Docker services (Chroma, Qdrant) are unavailable → JSON vector store fallback.
+- WebGL/Three.js 3D lab viewer requires a browser with GPU; works in real browsers, not in screenshot tools.
 
 ## User preferences
 
 - Keep existing project structure and stack.
+- All pages should have easy bidirectional navigation.

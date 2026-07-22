@@ -6,6 +6,47 @@ import { useHoloKai } from '@/lib/HoloKaiContext';
 import { searchLibrary } from '@/lib/holokaiApi';
 import { MOCK_MAP_LOCATIONS } from '@/lib/mockData';
 
+/** Fallback coordinates for sources that lack lat/lng — keyed by civilization then region */
+const GEOCODE_BY_CIVILIZATION = {
+  Kush: { lat: 18.5, lng: 31.8 },
+  Kemet: { lat: 26.0, lng: 32.0 },
+  Aksum: { lat: 14.1, lng: 38.7 },
+  Mali: { lat: 15.0, lng: -8.0 },
+  Benin: { lat: 6.5, lng: 5.6 },
+  Zimbabwe: { lat: -20.3, lng: 30.9 },
+  'Ghana Empire': { lat: 15.0, lng: -10.0 },
+  'Swahili Coast': { lat: -6.8, lng: 39.3 },
+  Nok: { lat: 9.5, lng: 7.5 },
+  Yoruba: { lat: 7.0, lng: 4.0 },
+  Ashanti: { lat: 6.7, lng: -1.6 },
+  Dogon: { lat: 14.5, lng: -3.5 },
+  Ejagham: { lat: 5.5, lng: 8.5 },
+  'Ejagham / Igbo': { lat: 5.5, lng: 8.5 },
+  Songhai: { lat: 16.3, lng: 0.0 },
+  Ethiopia: { lat: 9.0, lng: 40.0 },
+  'Bantu peoples': { lat: -5.0, lng: 23.0 },
+};
+
+const GEOCODE_BY_REGION = {
+  'Nile Valley': { lat: 26.0, lng: 32.0 },
+  Nubia: { lat: 18.5, lng: 31.8 },
+  'West Africa': { lat: 12.0, lng: -5.0 },
+  'East Africa': { lat: -6.0, lng: 36.0 },
+  'Southern Africa': { lat: -20.0, lng: 28.0 },
+  'Horn of Africa': { lat: 10.0, lng: 42.0 },
+  'Central Africa': { lat: 0.0, lng: 20.0 },
+  'Cross River': { lat: 5.5, lng: 8.5 },
+  Mali: { lat: 14.5, lng: -3.5 },
+  Ghana: { lat: 6.7, lng: -1.6 },
+  Ethiopia: { lat: 9.0, lng: 40.0 },
+  'Sub-Saharan Africa': { lat: 5.0, lng: 20.0 },
+};
+
+function resolveCoords(source) {
+  if (source.lat != null && source.lng != null) return { lat: source.lat, lng: source.lng };
+  return GEOCODE_BY_CIVILIZATION[source.civilization] || GEOCODE_BY_REGION[source.region] || null;
+}
+
 const REGION_LAYERS = [
   { id: 'all', label: 'All Sites' },
   { id: 'Nile Valley', label: 'Nile Valley' },
@@ -30,17 +71,21 @@ export default function InteractiveMap() {
       const data = await searchLibrary({ region, limit: 100 });
       if (data?.items?.length) {
         const mapped = data.items
-          .filter((s) => s.lat != null && s.lng != null)
-          .map((s, i) => ({
-            id: `api-${s.slug || i}`,
-            name: s.title,
-            lat: s.lat,
-            lng: s.lng,
-            civilization: s.civilization || '',
-            era: s.era || 'Unknown',
-            description: s.summary || '',
-            region: s.region || '',
-          }));
+          .map((s, i) => {
+            const coords = resolveCoords(s);
+            if (!coords) return null;
+            return {
+              id: `api-${s.slug || i}`,
+              name: s.title,
+              lat: coords.lat,
+              lng: coords.lng,
+              civilization: s.civilization || '',
+              era: s.era || 'Unknown',
+              description: s.summary || '',
+              region: s.region || '',
+            };
+          })
+          .filter(Boolean);
         setApiLocations(mapped.length > 0 ? mapped : null);
       } else {
         setApiLocations(null);

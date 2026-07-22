@@ -22,6 +22,10 @@ args = "Backend (FastAPI)"
 task = "workflow.run"
 args = "Frontend (Vite)"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Landing Page (Vite)"
+
 [[workflows.workflow]]
 name = "Backend (FastAPI)"
 author = "agent"
@@ -37,8 +41,17 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm --prefix holo-kai run dev"
+args = "pnpm -C holo-kai run dev"
 waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Landing Page (Vite)"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter fusion-starter run dev"
+waitForPort = 8080
 
 [[ports]]
 localPort = 5000
@@ -47,3 +60,13 @@ externalPort = 80
 [[ports]]
 localPort = 8000
 externalPort = 8000
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[userenv]
+
+[userenv.shared]
+VITE_CORE_URL = "http://localhost:5000"
+VITE_LANDING_URL = "http://localhost:8080"

@@ -1,13 +1,14 @@
 {
   "name": "holokai-civilization-core",
   "private": true,
-  "description": "HoloKai root scripts — active frontend is /holo-kai (frontend/ is retired)",
+  "description": "HoloKai monorepo — pnpm workspace. Active frontend: holo-kai/. Orbital lab entry: HoloKai - landingpage/. Backend: main.py.",
   "scripts": {
-    "dev": "npm --prefix holo-kai run dev",
-    "dev:app": "npm --prefix holo-kai run dev",
-    "build": "npm --prefix holo-kai run build",
-    "preview": "npm --prefix holo-kai run preview",
-    "backend": "python main.py",
-    "dev:frontend-legacy": "npm --prefix frontend run dev"
+    "dev": "pnpm -C holo-kai run dev",
+    "dev:app": "pnpm -C holo-kai run dev",
+    "dev:landingpage": "pnpm --filter fusion-starter run dev",
+    "build": "pnpm -C holo-kai run build",
+    "build:landingpage": "pnpm --filter fusion-starter run build",
+    "preview": "pnpm -C holo-kai run preview",
+    "backend": "python main.py"
   }
 }

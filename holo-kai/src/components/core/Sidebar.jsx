@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   MessageSquare, Library, Clock, Map, GitBranch, ScrollText,
-  Scale, Volume2, ChevronLeft, Shield, ShieldCheck, PenTool,
+  Scale, Volume2, ChevronLeft, ShieldCheck, PenTool,
 } from 'lucide-react';
 import { useHoloKai } from '@/lib/HoloKaiContext';
 import { GUARDIANS } from '@/lib/guardians';
@@ -158,13 +158,13 @@ export default function Sidebar({ activeView, onNavigate }) {
 
       {/* Footer */}
       <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(200, 149, 42, 0.1)' }}>
-        <Link
-          to="/"
+        <a
+          href={import.meta.env.VITE_LANDING_URL || '/'}
           className="flex items-center gap-2 text-[10px] tracking-[0.1em] uppercase text-white/30 hover:text-white/60 transition-colors"
         >
           <ChevronLeft className="w-3 h-3" />
-          Return to Orbital Lab
-        </Link>
+          Return to Alkebulan
+        </a>
       </div>
     </aside>
   );

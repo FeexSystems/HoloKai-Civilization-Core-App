@@ -898,6 +898,8 @@ async def library_search_endpoint(
     evidence_type: str | None = None,
     editorial_status: str | None = "reviewed",
     peer_reviewed: bool | None = None,
+    civilization: str | None = None,
+    type: str | None = Query(None, description="Source type / item_type filter"),
     limit: int = Query(25, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
@@ -909,6 +911,8 @@ async def library_search_endpoint(
         evidence_type=evidence_type,
         editorial_status=editorial_status,
         peer_reviewed=peer_reviewed,
+        civilization=civilization,
+        item_type=type,
         limit=limit,
         offset=offset,
     )

@@ -38,7 +38,26 @@ def storage_status() -> Dict[str, Any]:
     return {"backend": "json", **pg}
 
 
-def search_sources(**kwargs) -> Dict[str, Any]:
+def search_sources(
+    *,
+    q: str = "",
+    region=None,
+    era=None,
+    language=None,
+    evidence_type=None,
+    editorial_status="reviewed",
+    peer_reviewed=None,
+    civilization=None,
+    item_type=None,
+    limit: int = 25,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    kwargs = dict(
+        q=q, region=region, era=era, language=language,
+        evidence_type=evidence_type, editorial_status=editorial_status,
+        peer_reviewed=peer_reviewed, civilization=civilization,
+        item_type=item_type, limit=limit, offset=offset,
+    )
     pg = _pg()
     if pg:
         try:

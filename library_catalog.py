@@ -137,6 +137,8 @@ def search_sources(
     evidence_type: str | None = None,
     editorial_status: str | None = "reviewed",
     peer_reviewed: bool | None = None,
+    civilization: str | None = None,
+    item_type: str | None = None,
     limit: int = 25,
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -151,10 +153,25 @@ def search_sources(
         "evidence_type": evidence_type,
         "editorial_status": editorial_status,
     }
+    if item_type:
+        filters["item_type"] = item_type
     if peer_reviewed is not None:
         filters["peer_reviewed"] = peer_reviewed
 
-    kept = [s for s in rows if _matches(s, q) and _apply_filters(s, filters)]
+    # civilization is a soft text filter — records may lack the field,
+    # so we do a case-insensitive substring check against the title + authors text.
+    civ_lower = civilization.lower() if civilization else None
+
+    def _matches_civ(source: Dict[str, Any]) -> bool:
+        if not civ_lower:
+            return True
+        haystack = " ".join([
+            str(source.get("civilization") or ""),
+            str(source.get("title") or ""),
+        ]).lower()
+        return civ_lower in haystack
+
+    kept = [s for s in rows if _matches(s, q) and _apply_filters(s, filters) and _matches_civ(s)]
     total = len(kept)
     paged = kept[offset : offset + max(1, min(limit, 200))]
 

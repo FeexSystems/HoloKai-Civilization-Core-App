@@ -198,7 +198,7 @@ export default function Index() {
           </nav>
           <button
             type="button"
-            onClick={() => { window.location.href = "http://localhost:5173"; }}
+            onClick={() => { window.location.href = import.meta.env.VITE_CORE_URL || "http://localhost:5000"; }}
             className="hidden items-center gap-2 border border-amber-500/30 bg-amber-500/10 px-5 py-3 text-[10px] font-bold tracking-[0.18em] text-amber-50 transition hover:bg-amber-500/20 sm:flex"
           >
             <Zap className="h-3.5 w-3.5 text-amber-400" />
@@ -251,7 +251,7 @@ export default function Index() {
               </button>
               <button
                 type="button"
-                onClick={() => { window.location.href = "http://localhost:5173"; }}
+                onClick={() => { window.location.href = import.meta.env.VITE_CORE_URL || "http://localhost:5000"; }}
                 className="border border-amber-500/40 bg-amber-500/10 px-8 py-4 text-xs tracking-[0.2em] text-amber-200 transition hover:bg-amber-500/20"
               >
                 ENTER ALKEBULAN
@@ -326,15 +326,15 @@ export default function Index() {
               key={unit.id}
               type="button"
               onClick={() => openUnit(unit)}
-              className="group relative h-[530px] w-[82vw] flex-none overflow-hidden border border-amber-900/40 bg-zinc-950 text-left sm:w-[440px]"
+              className="group relative h-[530px] w-[82vw] flex-none overflow-hidden border border-amber-900/40 text-left sm:w-[440px]"
             >
               <img
                 src={unit.fullbodyImage}
                 alt={unit.name}
-                className="absolute inset-0 h-full w-full object-cover object-top opacity-50 grayscale transition duration-700 group-hover:scale-105 group-hover:opacity-90 group-hover:grayscale-0"
+                className="absolute inset-0 h-full w-full object-cover object-top transition duration-700 group-hover:scale-105"
+                style={{ mixBlendMode: 'screen' }}
                 loading="lazy"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#020202] via-[#020202]/50 to-transparent" />
               <div className="relative flex h-full flex-col justify-between p-7">
                 <div className="flex items-start justify-between">
                   <span className="font-display text-5xl font-bold text-amber-500/65">
@@ -357,6 +357,19 @@ export default function Index() {
               </div>
             </button>
           ))}
+        </div>
+
+        {/* Vanguard → Core CTA */}
+        <div className="mt-12 flex justify-center px-6">
+          <button
+            type="button"
+            onClick={() => { window.location.href = import.meta.env.VITE_CORE_URL || "http://localhost:5000"; }}
+            className="group flex items-center gap-3 border border-amber-500/40 bg-amber-500/10 px-10 py-4 text-xs font-bold tracking-[0.22em] text-amber-200 transition hover:bg-amber-500 hover:text-black"
+          >
+            <Zap className="h-4 w-4 transition-colors group-hover:text-black" />
+            ENTER ALKEBULAN — CIVILIZATION CORE
+            <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </button>
         </div>
       </section>
 
@@ -416,6 +429,9 @@ export default function Index() {
             onReturnToLanding={() => {
               closeLab();
               scrollToSection('top');
+            }}
+            onEnterAlkebulan={() => {
+              window.location.href = import.meta.env.VITE_CORE_URL || "http://localhost:5000";
             }}
           />
         ) : null}
