@@ -1,0 +1,53 @@
+## Objective
+- Make `HoloKai - landingpage/` the orbital lab entry page that navigates to `holo-kai/` (Vite app) as the main UI with Library, Timeline, Map, Studio, Vanguard panel, chat, Spline robot. All features from `frontend/` (Next.js) have been ported to `holo-kai/`. `frontend/`, `base44-app/`, and `holo-kai/.git/` are now deleted.
+
+## Important Details
+- `HoloKai - landingpage/` stays standalone; already has "ENTER ALKEBULAN" buttons linking to `http://localhost:5173` (hero + header).
+- `holo-kai/` (Base44 app, Vite + npm + JS) is the active UI. Studio & Vanguard are panels inside `CivilizationCore.jsx`.
+- **`VanguardPanel` renders twice**: once in `PANELS` mapping (when sidebar Vanguard clicked) and once as always-floating overlay (`CivilizationCore.jsx:123`). The floating version (`z-[105]`) covers the main-content version.
+- **TimelineExplorer era filter broken for 4 of 6 eras**: only `'ancient'` and `'classical'` filter correctly; `'medieval-early'`, `'medieval-late'`, `'early-modern'`, `'modern'` all return `true` (no filter).
+- **InteractiveMap never shows API data**: `searchLibrary` returns no `lat/lng` fields, so `filter((s) => s.lat != null)` removes all API results; always falls back to `MOCK_MAP_LOCATIONS`.
+- **Library API call** fires on every keystroke (no debounce, `search` in `useCallback` deps) and does not pass `civilization`/`type` filters to `searchLibrary`.
+- `ProtectedRoute` wraps `/core` — unauthenticated users are redirected to `/login`.
+- `holo-kai/package.json` has all dependencies; `node_modules/` are installed; `npm run build` passed.
+- `HoloKai - landingpage` `pnpm build` passed.
+- Python backend `main.py` has all 12 required endpoints (confirmed earlier).
+- Vite proxy in `holo-kai/vite.config.js`: `/api` → `http://localhost:8000`.
+- Remote: `origin https://github.com/FeexSystems/HoloKai-Civilization-Core-App.git`
+- Last commit: `Port frontend features to holo-kai, delete base44-app and frontend, add orbital lab entry point` (amended after fixing holo-kai submodule issue).
+
+## Work State
+### Completed
+- `base44-app/` deleted.
+- `frontend/` deleted after full port.
+- `holo-kai/.git/` removed, submodule reference fixed by amending commit.
+- 11 API functions added to `holo-kai/src/lib/holokaiApi.js`: `healthCheck`, `searchLibrary`, `libraryFacets`, `getLibrarySource`, `studioQueue`, `studioReview`, `studioImportRis`, `createImportRisJob`, `listJobs`, `storageStatus`, `fragmentsToContextPrompt`.
+- 4 new components created in `holo-kai/src/components/core/`: `VanguardPanel.jsx`, `ClaimCitations.jsx`, `SourceDrawer.jsx`, `StudioEditor.jsx`.
+- `Library.jsx` rewritten: calls `searchLibrary`/`libraryFacets` API + era/region filters + mock fallback + `civilization`/`type` dropdowns.
+- `TimelineExplorer.jsx` rewritten: 6-era filter bar + `searchLibrary` API + mock fallback.
+- `InteractiveMap.jsx` rewritten: 7-region layer filter + `searchLibrary` API + mock fallback.
+- `Sidebar.jsx`: added Vanguard (`ShieldCheck`) + Studio (`PenTool`) nav items.
+- `CivilizationCore.jsx`: added `VanguardPanel`, `SourceDrawer`, `StudioEditor` imports; registered `vanguard` + `studio` in `PANELS`; renders `SourceDrawer` + floating `VanguardPanel` outside main content.
+- `HoloKai - landingpage/client/pages/Index.tsx`: header "ACCESS CORE" → "ENTER ALKEBULAN"; hero added "ENTER ALKEBULAN" amber button.
+- All staged and committed to local git.
+
+### Active
+- Git push not yet performed (committed locally; awaiting final fixes before `git push origin main`).
+
+### Blocked
+- (none directly blocked — issues identified but fixable)
+
+## Next Move
+1. Fix the 6 implementation issues identified during post-execution audit: Vanguard double-render (either remove from PANELS or add `panelProps`), Timeline era filter (complete all 6 era bounds), InteractiveMap API data (remove `lat/lng` filter blocking API results), Library debounce (add 300ms debounce), Library pass all filter params to API call, remove unused `Shield` import from Sidebar.
+2. After fixes, run `git add -A && git commit -m "fix: post-port audit issues" && git push origin main`.
+3. Apply the three new user requests: make Vanguard card images transparent (`mix-blend-mode: screen`), remove "RETURN" button from `UnitLabViewer.tsx`, add clearer access points to Civilization Core/Library/Spline robot from landing page.
+4. Run `npm run dev` in `holo-kai/` and `pnpm dev` in `HoloKai - landingpage/` to verify.
+
+## Relevant Files
+- `holo-kai/src/pages/CivilizationCore.jsx`: VanguardPanel double-render (line 29 in PANELS + line 123 floating); add `panelProps` for vanguard view.
+- `holo-kai/src/components/core/TimelineExplorer.jsx`: era filter switch only handles `'ancient'`/`'classical'` — add all 6 era bounds.
+- `holo-kai/src/components/core/InteractiveMap.jsx`: `filter((s) => s.lat != null && s.lng != null)` blocks all API data — make conditional or remove.
+- `holo-kai/src/components/core/Library.jsx`: `loadFromApi` deps include `search` (no debounce); `civilization`/`type` not passed to API call.
+- `HoloKai - landingpage/client/pages/Index.tsx`: Vanguard card `<img>` needs `mix-blend-mode: screen` + remove `bg-zinc-950` + remove gradient overlay; "ENTER ALKEBULAN" href may change to `/orbital-lab`; add "CIVILIZATION CORE" button.
+- `HoloKai - landingpage/client/components/lab/UnitLabViewer.tsx`: remove `onReturnToLanding` button block (lines 276-286).
+- `holo-kai/src/components/core/Sidebar.jsx`: remove unused `Shield` import from `lucide-react` (line 5).
