@@ -26,7 +26,6 @@ const PANELS = {
   'knowledge-graph': KnowledgeGraph,
   compare: CompareCivilizations,
   'oral-tradition': OralTraditionExplorer,
-  vanguard: VanguardPanel,
   studio: StudioEditor,
 };
 

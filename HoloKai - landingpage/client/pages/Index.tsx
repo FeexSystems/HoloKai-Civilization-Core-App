@@ -256,6 +256,20 @@ export default function Index() {
               >
                 ENTER ALKEBULAN
               </button>
+              <button
+                type="button"
+                onClick={() => { window.location.href = "http://localhost:5173/core"; }}
+                className="border border-white/20 px-8 py-4 text-xs tracking-[0.2em] text-white transition hover:bg-white/5"
+              >
+                CIVILIZATION CORE
+              </button>
+              <button
+                type="button"
+                onClick={() => { window.location.href = "http://localhost:5173/orbital-lab"; }}
+                className="border border-white/20 px-8 py-4 text-xs tracking-[0.2em] text-white transition hover:bg-white/5"
+              >
+                SPLINE LAB
+              </button>
             </div>
             <div className="mt-10 flex flex-wrap gap-6 border-t border-white/10 pt-6">
               {[
